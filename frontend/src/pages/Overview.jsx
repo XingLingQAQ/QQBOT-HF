@@ -1,52 +1,83 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
 import api from "../api";
+import { loginState, procState, qqAvatar } from "../format";
 
-const STATUS_LABELS = {
-  online: { text: "在线", cls: "badge green" },
-  offline: { text: "离线", cls: "badge red" },
-  waiting_scan: { text: "等待扫码", cls: "badge yellow" },
-  scanned: { text: "已扫码", cls: "badge yellow" },
-  expired: { text: "二维码已过期", cls: "badge red" },
-};
+const PROCS = [
+  { key: "lagrange", label: "Lagrange.OneBot" },
+  { key: "nonebot", label: "NoneBot" },
+  { key: "backend", label: "后端服务" },
+];
 
 export default function Overview() {
   const [status, setStatus] = useState({});
   const [login, setLogin] = useState({ status: "offline", qq: "", nickname: "" });
 
-  useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      try {
-        const [s, l] = await Promise.all([
-          api.get("/status"),
-          api.get("/login-status"),
-        ]);
-        if (!alive) return;
-        setStatus(s.data);
-        setLogin(l.data);
-      } catch {
-        /* ignore */
-      }
-    };
-    tick();
-    const id = setInterval(tick, 3000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+  const tick = useCallback(async () => {
+    try {
+      const [s, l] = await Promise.all([
+        api.get("/status"),
+        api.get("/login-status"),
+      ]);
+      setStatus(s.data);
+      setLogin(l.data);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  const badge = STATUS_LABELS[login.status] || STATUS_LABELS.offline;
+  useEffect(() => {
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => clearInterval(id);
+  }, [tick]);
+
+  const badge = loginState(login.status);
+  const online = login.status === "online";
+  const avatar = online ? qqAvatar(login.qq) : "";
 
   return (
     <div className="page">
       <h2 className="page-title">总览</h2>
+
+      <div className={`hero ${online ? "online" : ""}`}>
+        <div className="hero-avatar">
+          {avatar ? (
+            <img src={avatar} alt="头像" onError={(e) => (e.currentTarget.style.display = "none")} />
+          ) : (
+            <span className="hero-avatar-fallback">QQ</span>
+          )}
+        </div>
+        <div className="hero-info">
+          <div className="hero-line">
+            <span className="hero-name">{login.nickname || (online ? "已登录" : "未登录")}</span>
+            <span className={`badge ${badge.tone}`}>{badge.text}</span>
+          </div>
+          <div className="hero-sub">{login.qq ? `QQ ${login.qq}` : "请前往「扫码登录」绑定账号"}</div>
+        </div>
+        <button className="btn" onClick={tick}>刷新</button>
+      </div>
+
       <div className="grid">
-        <Card title="登录状态">
+        <Card title="进程状态">
+          {PROCS.map(({ key, label }) => {
+            const s = procState(status[key]);
+            return (
+              <div className="kv" key={key}>
+                <span>{label}</span>
+                <span className="state-pill">
+                  <span className={`light ${s.tone}`} />
+                  {s.text}
+                </span>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card title="登录信息">
           <div className="kv">
             <span>状态</span>
-            <span className={badge.cls}>{badge.text}</span>
+            <span className={`badge ${badge.tone}`}>{badge.text}</span>
           </div>
           <div className="kv">
             <span>QQ 号</span>
@@ -55,21 +86,6 @@ export default function Overview() {
           <div className="kv">
             <span>昵称</span>
             <span>{login.nickname || "—"}</span>
-          </div>
-        </Card>
-
-        <Card title="进程状态">
-          <div className="kv">
-            <span>Lagrange.OneBot</span>
-            <span>{status.lagrange || "?"}</span>
-          </div>
-          <div className="kv">
-            <span>NoneBot</span>
-            <span>{status.nonebot || "?"}</span>
-          </div>
-          <div className="kv">
-            <span>后端服务</span>
-            <span>{status.backend || "?"}</span>
           </div>
         </Card>
       </div>

@@ -1,12 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
 export default function Terminal() {
   const containerRef = useRef(null);
-  const termRef = useRef(null);
-  const wsRef = useRef(null);
+  const [seed, setSeed] = useState(0);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const term = new XTerm({
@@ -19,30 +19,28 @@ export default function Terminal() {
     term.loadAddon(fit);
     term.open(containerRef.current);
     fit.fit();
-    termRef.current = term;
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${window.location.host}/ws/terminal`);
-    wsRef.current = ws;
 
     const sendResize = () => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(
-          JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows })
-        );
+        ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
       }
     };
 
     ws.onopen = () => {
+      setConnected(true);
       term.writeln("\u001b[32m已连接到容器终端 (appuser @ /data)\u001b[0m");
       sendResize();
     };
     ws.onmessage = (ev) => term.write(ev.data);
     ws.onclose = (ev) => {
+      setConnected(false);
       if (ev.code === 4401) {
         term.writeln("\r\n\u001b[31m未授权：请重新登录。\u001b[0m");
       } else {
-        term.writeln("\r\n\u001b[33m连接已关闭。\u001b[0m");
+        term.writeln("\r\n\u001b[33m连接已关闭，点击「重新连接」恢复会话。\u001b[0m");
       }
     };
     ws.onerror = () => term.writeln("\r\n\u001b[31m连接错误。\u001b[0m");
@@ -73,11 +71,16 @@ export default function Terminal() {
       }
       term.dispose();
     };
-  }, []);
+  }, [seed]);
 
   return (
     <div className="page terminal-page">
-      <h2 className="page-title">网页终端</h2>
+      <div className="terminal-bar">
+        <h2 className="page-title" style={{ margin: 0 }}>网页终端</h2>
+        <span className={`conn-dot ${connected ? "on" : "off"}`} />
+        <span className="conn-text">{connected ? "已连接" : "未连接"}</span>
+        <button className="btn" onClick={() => setSeed((s) => s + 1)}>重新连接</button>
+      </div>
       <div className="terminal-wrap">
         <div ref={containerRef} className="terminal-host" />
       </div>

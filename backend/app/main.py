@@ -53,8 +53,10 @@ def spa_fallback(full_path: str):
 
     # Serve a real static file if it exists (e.g. favicon, vite.svg).
     if full_path:
-        candidate = os.path.normpath(os.path.join(config.STATIC_DIR, full_path))
-        if candidate.startswith(os.path.realpath(config.STATIC_DIR)) and os.path.isfile(candidate):
+        static_root = os.path.realpath(config.STATIC_DIR)
+        candidate = os.path.realpath(os.path.join(static_root, full_path))
+        within = candidate == static_root or candidate.startswith(static_root + os.sep)
+        if within and os.path.isfile(candidate):
             return FileResponse(candidate)
 
     index_path = os.path.join(config.STATIC_DIR, "index.html")

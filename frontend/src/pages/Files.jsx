@@ -26,6 +26,8 @@ export default function Files() {
   const [toast, setToast] = useState("");
   const [editing, setEditing] = useState(null); // {path, content}
   const [editContent, setEditContent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
   const flash = (t) => {
@@ -34,12 +36,15 @@ export default function Files() {
   };
 
   const load = useCallback(async (p) => {
+    setLoading(true);
     try {
       const { data } = await api.get("/files/list", { params: { path: p } });
       setPath(data.path || "");
       setItems(data.items || []);
     } catch (e) {
       flash(e?.response?.data?.detail || "无法读取目录");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -126,21 +131,28 @@ export default function Files() {
     }
   };
 
-  const upload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+  const uploadFiles = async (files) => {
+    if (!files || files.length === 0) return;
     const form = new FormData();
     form.append("path", path);
     files.forEach((f) => form.append("files", f));
     try {
       await api.post("/files/upload", form);
-      flash("上传完成");
+      flash(`已上传 ${files.length} 个文件`);
       load(path);
     } catch (err) {
       flash(err?.response?.data?.detail || "上传失败");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const upload = (e) => uploadFiles(Array.from(e.target.files || []));
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    uploadFiles(Array.from(e.dataTransfer?.files || []));
   };
 
   const crumbs = path ? path.split("/") : [];
@@ -191,6 +203,16 @@ export default function Files() {
           </div>
         }
       >
+        <div
+          className={`dropzone ${dragOver ? "drag" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+        {loading && <div className="empty">加载中…</div>}
         <table className="table">
           <thead>
             <tr>
@@ -251,6 +273,8 @@ export default function Files() {
             )}
           </tbody>
         </table>
+        {dragOver && <div className="drop-hint">松开以上传到当前目录</div>}
+        </div>
       </Card>
 
       <Modal

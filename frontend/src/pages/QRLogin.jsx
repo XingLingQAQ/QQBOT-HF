@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Card from "../components/Card.jsx";
 import api from "../api";
+import { loginState } from "../format";
 
 const STATUS_HINT = {
   online: "已登录并连接成功。",
@@ -15,6 +16,7 @@ export default function QRLogin() {
   const [qrTs, setQrTs] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [qrOk, setQrOk] = useState(false);
 
   const poll = useCallback(async () => {
     try {
@@ -69,11 +71,15 @@ export default function QRLogin() {
   };
 
   const isOnline = info.status === "online";
+  const badge = loginState(info.status);
 
   return (
     <div className="page">
       <h2 className="page-title">扫码登录</h2>
-      <Card title={isOnline ? "账号信息" : "扫码登录"}>
+      <Card
+        title={isOnline ? "账号信息" : "扫码登录"}
+        extra={<span className={`badge ${badge.tone}`}>{badge.text}</span>}
+      >
         <p className="hint-line">{STATUS_HINT[info.status] || ""}</p>
 
         {isOnline ? (
@@ -92,21 +98,27 @@ export default function QRLogin() {
           </div>
         ) : (
           <div className="qr-box">
-            <img
-              className="qr-img"
-              src={`/api/qrcode?t=${qrTs}`}
-              alt="登录二维码"
-              onError={(e) => {
-                e.currentTarget.style.visibility = "hidden";
-              }}
-              onLoad={(e) => {
-                e.currentTarget.style.visibility = "visible";
-              }}
-            />
+            <div className="qr-frame">
+              <img
+                className="qr-img"
+                src={`/api/qrcode?t=${qrTs}`}
+                alt="登录二维码"
+                style={{ display: qrOk ? "block" : "none" }}
+                onError={() => setQrOk(false)}
+                onLoad={() => setQrOk(true)}
+              />
+              {!qrOk && (
+                <div className="qr-placeholder">
+                  <span className="spinner" />
+                  <span>二维码生成中…</span>
+                </div>
+              )}
+            </div>
             <div className="qr-actions">
               <button className="btn primary" disabled={busy} onClick={refreshQr}>
-                刷新二维码
+                {busy ? "处理中…" : "刷新二维码"}
               </button>
+              <p className="hint-line muted">页面每 2.5 秒自动检测登录状态，二维码自动刷新。</p>
             </div>
           </div>
         )}

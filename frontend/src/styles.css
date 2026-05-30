@@ -616,6 +616,209 @@ body {
   height: 100%;
 }
 
+/* ---------- Transitions & polish ---------- */
+.nav-item,
+.btn,
+.btn-link,
+.crumb,
+.slider,
+.slider::before {
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.card {
+  transition: box-shadow 0.18s, transform 0.18s;
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.light.gray {
+  background: #ccc;
+}
+
+.badge.gray {
+  background: #bbb;
+}
+
+.table tbody tr {
+  transition: background 0.12s;
+}
+
+.table tbody tr:hover {
+  background: #fafcff;
+}
+
+/* ---------- Overview hero ---------- */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 60%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+}
+
+.hero.online {
+  background: linear-gradient(135deg, #f0fff4 0%, #ffffff 60%);
+}
+
+.hero-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-avatar-fallback {
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.hero-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.hero-sub {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* ---------- QR frame / placeholder ---------- */
+.qr-frame {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  margin: 0 auto;
+}
+
+.qr-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  background: #fafafa;
+}
+
+.hint-line.muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #e6e6e6;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Dropzone (files) ---------- */
+.dropzone {
+  position: relative;
+  border-radius: 8px;
+  transition: outline 0.15s, background 0.15s;
+}
+
+.dropzone.drag {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+  background: #f0f7ff;
+}
+
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* ---------- Terminal bar ---------- */
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.terminal-bar .btn {
+  margin-left: auto;
+}
+
+.conn-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.conn-dot.on {
+  background: var(--green);
+}
+
+.conn-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ---------- Mobile sidebar backdrop ---------- */
+.scrim {
+  display: none;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
   .hamburger {
@@ -624,12 +827,23 @@ body {
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.2s;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.15);
   }
   .sidebar.open {
     transform: translateX(0);
   }
+  .scrim.show {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 15;
+  }
   .content {
     margin-left: 0;
     padding: 64px 16px 16px;
+  }
+  .terminal-page {
+    height: calc(100vh - 96px);
   }
 }

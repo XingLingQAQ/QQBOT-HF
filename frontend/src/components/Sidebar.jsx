@@ -26,6 +26,10 @@ export default function Sidebar() {
       <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="menu">
         ☰
       </button>
+      <div
+        className={`scrim ${open ? "show" : ""}`}
+        onClick={() => setOpen(false)}
+      />
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand">QQ 机器人面板</div>
         <nav className="nav">

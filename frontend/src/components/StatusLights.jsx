@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import api from "../api";
+import { procState } from "../format";
 
-function lightClass(state) {
-  if (state === "RUNNING") return "light green";
-  if (state === "STARTING" || state === "STOPPING") return "light yellow";
-  return "light red";
-}
+const ROWS = [
+  { key: "lagrange", label: "Lagrange" },
+  { key: "nonebot", label: "NoneBot" },
+  { key: "backend", label: "后端" },
+];
 
 export default function StatusLights() {
-  const [status, setStatus] = useState({ lagrange: "?", nonebot: "?" });
+  const [status, setStatus] = useState({});
 
   useEffect(() => {
     let alive = true;
@@ -30,16 +31,16 @@ export default function StatusLights() {
 
   return (
     <div className="status-lights">
-      <div className="status-row">
-        <span className={lightClass(status.lagrange)} />
-        <span>Lagrange</span>
-        <span className="status-text">{status.lagrange}</span>
-      </div>
-      <div className="status-row">
-        <span className={lightClass(status.nonebot)} />
-        <span>NoneBot</span>
-        <span className="status-text">{status.nonebot}</span>
-      </div>
+      {ROWS.map(({ key, label }) => {
+        const s = procState(status[key]);
+        return (
+          <div className="status-row" key={key} title={status[key] || "未知"}>
+            <span className={`light ${s.tone}`} />
+            <span>{label}</span>
+            <span className="status-text">{s.text}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
