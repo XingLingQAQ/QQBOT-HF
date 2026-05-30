@@ -1,0 +1,86 @@
+"""Shared helpers: safe path joins, plugin manifest IO, dotenv editing."""
+
+import json
+import os
+import re
+from typing import Any, Dict, List
+
+from fastapi import HTTPException
+
+from . import config
+
+_PLUGIN_NAME_RE = re.compile(r"^nonebot[-_]plugin[-_][A-Za-z0-9_-]+$")
+
+
+def safe_join(base: str, *paths: str) -> str:
+    """Join ``paths`` onto ``base`` and guarantee the result stays inside ``base``.
+
+    Protects against path traversal (``..``) and symlink escapes. Raises a 400
+    ``HTTPException`` if the resolved path would leave ``base``.
+    """
+    base_real = os.path.realpath(base)
+    # Treat the joined path as relative to base; strip leading separators so an
+    # absolute-looking input cannot escape via os.path.join semantics.
+    cleaned = [p.lstrip("/\\") for p in paths if p not in (None, "")]
+    candidate = os.path.realpath(os.path.join(base_real, *cleaned)) if cleaned else base_real
+    if candidate != base_real and not candidate.startswith(base_real + os.sep):
+        raise HTTPException(status_code=400, detail="invalid path")
+    return candidate
+
+
+def valid_plugin_name(name: str) -> bool:
+    """Validate a plugin package name against the NoneBot plugin convention."""
+    return bool(name) and bool(_PLUGIN_NAME_RE.match(name))
+
+
+def read_plugins() -> Dict[str, Any]:
+    """Read ``plugins.json``; return ``{"plugins": []}`` when missing/corrupt."""
+    try:
+        with open(config.PLUGINS_JSON, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict) or not isinstance(data.get("plugins"), list):
+            return {"plugins": []}
+        return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"plugins": []}
+
+
+def write_plugins(data: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(config.PLUGINS_JSON), exist_ok=True)
+    tmp = config.PLUGINS_JSON + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, config.PLUGINS_JSON)
+
+
+def human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024.0 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
+
+
+def update_env_file(path: str, key: str, value: str) -> None:
+    """Set ``KEY=value`` in a dotenv file, updating in place or appending."""
+    lines: List[str] = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    new_line = f"{key}={value}"
+    found = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("#") or "=" not in stripped:
+            continue
+        existing_key = stripped.split("=", 1)[0].strip()
+        if existing_key == key:
+            lines[i] = new_line
+            found = True
+            break
+    if not found:
+        lines.append(new_line)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")

@@ -1,0 +1,35 @@
+"""NoneBot2 entrypoint (copied to /data/nonebot/bot.py on first run).
+
+Initializes NoneBot with the OneBot V11 adapter (reverse WebSocket server) and
+loads every enabled plugin listed in /data/plugins.json.
+"""
+
+import json
+import os
+
+import nonebot
+from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+
+nonebot.init()
+driver = nonebot.get_driver()
+driver.register_adapter(OneBotV11Adapter)
+
+# Load enabled plugins from the manager's manifest.
+data_dir = os.environ.get("DATA_DIR", "/data")
+plugins_json = os.path.join(data_dir, "plugins.json")
+if os.path.exists(plugins_json):
+    try:
+        with open(plugins_json, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except (ValueError, OSError):
+        cfg = {"plugins": []}
+    for p in cfg.get("plugins", []):
+        if p.get("enabled", True):
+            module = p.get("module") or p.get("name", "").replace("-", "_")
+            try:
+                nonebot.load_plugin(module)
+            except Exception as e:  # noqa: BLE001 - keep booting other plugins
+                print(f"load plugin {p.get('name')} failed: {e}")
+
+if __name__ == "__main__":
+    nonebot.run()
