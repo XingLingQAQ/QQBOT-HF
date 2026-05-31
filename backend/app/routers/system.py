@@ -133,7 +133,16 @@ def _run_pip_upgrade() -> str:
     ]
     try:
         proc = subprocess.run(
-            [config.PIP_BIN, "install", "--upgrade", *packages],
+            [
+                config.PYTHON_BIN,
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "--target",
+                config.PYTHON_PACKAGES_DIR,
+                *packages,
+            ],
             capture_output=True,
             text=True,
             timeout=900,

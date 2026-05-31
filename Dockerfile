@@ -25,8 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl bash procps libicu-dev tar gzip gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-install supervisor into system Python so PID 1 is available immediately.
-RUN pip install --no-cache-dir supervisor
+# Pre-install runtime Python dependencies into the image. Do not run app
+# processes from /data: some hosting runtimes mount persistent storage with
+# execution restrictions, so /data is used only for persisted configs/plugins.
+RUN pip install --no-cache-dir \
+      supervisor \
+      "fastapi>=0.110" "uvicorn[standard]>=0.29" "python-multipart>=0.0.9" \
+      "itsdangerous>=2.1" "aiofiles>=23.2" "websockets>=12.0" \
+      "nonebot2>=2.5.0" "nonebot-adapter-onebot>=2.4.6"
 
 # Download Lagrange.OneBot (linux-x64, self-contained net9.0 nightly).
 # URL fetched/verified via MCP (LagrangeDev/Lagrange.Core nightly release).

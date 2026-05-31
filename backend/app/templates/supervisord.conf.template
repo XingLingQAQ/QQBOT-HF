@@ -14,7 +14,7 @@ serverurl=http://127.0.0.1:9001
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [program:backend]
-command=${VENV_DIR}/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+command=${PYTHON_BIN} -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
 directory=/app/backend
 autostart=true
 autorestart=true
@@ -25,7 +25,7 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/backend.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-environment=DATA_DIR="${DATA_DIR}",STATIC_DIR="${STATIC_DIR}",VENV_DIR="${VENV_DIR}",PORT="${PORT}",ADMIN_USER="${ADMIN_USER}",ADMIN_PASS="${ADMIN_PASS}"
+environment=DATA_DIR="${DATA_DIR}",STATIC_DIR="${STATIC_DIR}",PYTHON_BIN="${PYTHON_BIN}",PYTHON_PACKAGES_DIR="${PYTHON_PACKAGES_DIR}",PYTHONPATH="${PYTHONPATH}",PORT="${PORT}",ADMIN_USER="${ADMIN_USER}",ADMIN_PASS="${ADMIN_PASS}"
 
 [program:lagrange]
 command=/opt/lagrange/Lagrange.OneBot
@@ -42,7 +42,7 @@ stdout_logfile_backups=3
 environment=DATA_DIR="${DATA_DIR}",LAGRANGE_SIGN_SERVER_URL="https://sign.lagrangecore.org/api/sign/39038"
 
 [program:nonebot]
-command=${VENV_DIR}/bin/python bot.py
+command=${PYTHON_BIN} bot.py
 directory=${DATA_DIR}/nonebot
 autostart=true
 autorestart=true
@@ -55,4 +55,4 @@ stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 # HOST/PORT are forced here so NoneBot binds its reverse-WS server on
 # 127.0.0.1:8080 and does NOT inherit the container's PORT (7860, the backend).
-environment=DATA_DIR="${DATA_DIR}",VENV_DIR="${VENV_DIR}",HOST="127.0.0.1",PORT="8080",PATH="${VENV_DIR}/bin:%(ENV_PATH)s"
+environment=DATA_DIR="${DATA_DIR}",PYTHON_BIN="${PYTHON_BIN}",PYTHON_PACKAGES_DIR="${PYTHON_PACKAGES_DIR}",PYTHONPATH="${PYTHONPATH}",HOST="127.0.0.1",PORT="8080"

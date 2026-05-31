@@ -56,7 +56,7 @@ export default function Overview() {
       deps: {
         label: "更新 NoneBot/依赖",
         url: "/system/update-python-deps",
-        confirm: "将升级 /data/venv 内的 FastAPI、NoneBot2 与 OneBot 适配器并重启服务，继续？",
+        confirm: "将升级容器内 Python 依赖包并重启服务，继续？",
       },
     };
     const item = map[kind];
@@ -133,7 +133,7 @@ export default function Overview() {
             </button>
           </div>
           <p className="hint-line">
-            更新操作只影响容器内持久化环境：Lagrange 二进制位于 /opt/lagrange，NoneBot 与适配器位于 /data/venv。
+            更新操作只影响容器内运行环境：Lagrange 二进制位于 /opt/lagrange，动态插件位于 /data/python-packages。
           </p>
           {updateMsg && <p className="hint-line info">{updateMsg}</p>}
         </Card>

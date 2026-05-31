@@ -7,7 +7,7 @@ Plain (non-JSON) text frames are also treated as raw input for convenience.
 
 Auth: the handshake reads the session cookie ``qqbot_session`` or a ``?token=``
 query param and verifies it; failure closes the socket with code 4401.
-The child shell inherits the venv PATH and starts in ``/data``.
+The child shell inherits the persisted plugin PYTHONPATH and starts in ``/data``.
 """
 
 import asyncio
@@ -50,7 +50,7 @@ async def terminal_ws(websocket: WebSocket):
     if pid == 0:
         # --- child process ---
         env = os.environ.copy()
-        env["PATH"] = f"{config.VENV_DIR}/bin:" + env.get("PATH", "")
+        env["PYTHONPATH"] = f"{config.PYTHON_PACKAGES_DIR}:{env.get('PYTHONPATH', '')}"
         env["TERM"] = "xterm-256color"
         env["HOME"] = os.environ.get("HOME", config.DATA_DIR)
         try:
