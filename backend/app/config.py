@@ -7,6 +7,19 @@ Secrets (admin credentials) are read from environment variables and never hardco
 import os
 import secrets
 
+
+def _int_env(name: str, default: int, *, minimum: int = 1, maximum: int | None = None) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    if value < minimum:
+        return default
+    if maximum is not None and value > maximum:
+        return default
+    return value
+
+
 # --- Base directories (all persistent state lives under DATA_DIR) ---
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 LAGRANGE_DIR = os.path.join(DATA_DIR, "lagrange")
@@ -28,7 +41,7 @@ ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 
 # --- Network ---
-PORT = int(os.environ.get("PORT", "7860"))
+PORT = _int_env("PORT", 7860, minimum=1, maximum=65535)
 NONEBOT_WS_PORT = 8080
 
 # --- Static frontend build output ---
@@ -38,7 +51,7 @@ STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 SESSION_COOKIE = "qqbot_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
 SUPERVISOR_HOST = os.environ.get("SUPERVISOR_HOST", "127.0.0.1")
-SUPERVISOR_PORT = int(os.environ.get("SUPERVISOR_PORT", "9001"))
+SUPERVISOR_PORT = _int_env("SUPERVISOR_PORT", 9001, minimum=1, maximum=65535)
 SECRET_KEY_PATH = os.path.join(MANAGER_DIR, "secret_key")
 
 # Supervisor program names (internal constants, never derived from user input).
@@ -48,8 +61,8 @@ PROG_NONEBOT = "nonebot"
 
 # Maximum size for text file read/write via the file manager (2 MB).
 MAX_TEXT_FILE_SIZE = 2 * 1024 * 1024
-MAX_UPLOAD_FILE_SIZE = int(os.environ.get("MAX_UPLOAD_FILE_SIZE", str(50 * 1024 * 1024)))
-MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20"))
+MAX_UPLOAD_FILE_SIZE = _int_env("MAX_UPLOAD_FILE_SIZE", 50 * 1024 * 1024)
+MAX_UPLOAD_FILES = _int_env("MAX_UPLOAD_FILES", 20, maximum=100)
 
 # Lagrange.OneBot runtime update/config defaults.
 LAGRANGE_RELEASE_URL = os.environ.get(

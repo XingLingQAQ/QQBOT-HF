@@ -109,9 +109,14 @@ def _validate_lagrange_url(url: str) -> str:
 def _safe_extract_lagrange_binary(archive: str, dest_dir: str) -> str:
     with tarfile.open(archive, "r:gz") as tar:
         members = tar.getmembers()
+        dest_real = os.path.realpath(dest_dir)
         for member in members:
+            if member.issym() or member.islnk() or member.isdev():
+                raise HTTPException(status_code=400, detail="unsafe archive member")
+            if not (member.isdir() or member.isfile()):
+                raise HTTPException(status_code=400, detail="unsupported archive member")
             target = os.path.realpath(os.path.join(dest_dir, member.name))
-            if target != os.path.realpath(dest_dir) and not target.startswith(os.path.realpath(dest_dir) + os.sep):
+            if target != dest_real and not target.startswith(dest_real + os.sep):
                 raise HTTPException(status_code=400, detail="unsafe archive path")
         tar.extractall(dest_dir, members)
     for root, _, files in os.walk(dest_dir):
@@ -197,7 +202,8 @@ def update_lagrange(body: UpdateLagrangeBody):
     with tempfile.TemporaryDirectory(dir=config.MANAGER_DIR) as tmp_dir:
         archive = os.path.join(tmp_dir, "lagrange.tar.gz")
         try:
-            urllib.request.urlretrieve(url, archive)
+            with urllib.request.urlopen(url, timeout=60) as resp, open(archive, "wb") as out:
+                shutil.copyfileobj(resp, out)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"download failed: {exc}")
         extract_dir = os.path.join(tmp_dir, "extract")

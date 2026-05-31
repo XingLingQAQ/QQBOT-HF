@@ -5,7 +5,7 @@ import subprocess
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import auth, config, process_manager, utils
 
@@ -20,7 +20,7 @@ class NameBody(BaseModel):
 
 class ConfigBody(BaseModel):
     name: str
-    config: Dict[str, Any] = {}
+    config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ToggleBody(BaseModel):
