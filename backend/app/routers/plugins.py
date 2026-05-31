@@ -1,5 +1,6 @@
 """Plugin management: install / uninstall / configure / toggle / restart."""
 
+import os
 import subprocess
 from typing import Any, Dict
 
@@ -34,7 +35,15 @@ def _module_name(pkg_name: str) -> str:
 
 def _pip(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [config.PIP_BIN, *args],
+        [
+            config.PYTHON_BIN,
+            "-m",
+            "pip",
+            *args,
+            "--target",
+            config.PYTHON_PACKAGES_DIR,
+            "--upgrade",
+        ],
         capture_output=True,
         text=True,
         timeout=600,
@@ -43,7 +52,20 @@ def _pip(*args: str) -> subprocess.CompletedProcess:
 
 def _detect_version(pkg_name: str) -> str:
     try:
-        proc = _pip("show", pkg_name)
+        proc = subprocess.run(
+            [
+                config.PYTHON_BIN,
+                "-m",
+                "pip",
+                "show",
+                pkg_name,
+                "--path",
+                config.PYTHON_PACKAGES_DIR,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return ""
     for line in (proc.stdout or "").splitlines():
@@ -102,7 +124,23 @@ def uninstall_plugin(body: NameBody):
     if not utils.valid_plugin_name(name):
         raise HTTPException(status_code=400, detail="invalid plugin name")
     try:
-        proc = _pip("uninstall", "-y", name)
+        proc = subprocess.run(
+            [
+                config.PYTHON_BIN,
+                "-m",
+                "pip",
+                "uninstall",
+                "-y",
+                name,
+            ],
+            env={
+                **os.environ,
+                "PYTHONPATH": f"{config.PYTHON_PACKAGES_DIR}:{os.environ.get('PYTHONPATH', '')}",
+            },
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="pip not available")
     except subprocess.TimeoutExpired:

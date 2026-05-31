@@ -30,7 +30,7 @@ pinned: false
 - **文件管理**：浏览 / 编辑 / 上传 / 下载 / 重命名 / 删除（严格限制在 `/data` 内）。
 - **网页终端**：基于 xterm.js 的浏览器终端，以非 root 的 `appuser` 运行 `/bin/bash`。
 - **进程总览**：实时显示 Lagrange / NoneBot / 后端进程状态。
-- **持久化**：所有状态（venv、登录凭据、插件、配置、日志）均位于 `/data`，容器重建后保留。
+- **持久化**：登录凭据、插件包、配置与日志均位于 `/data`，容器重建后保留。
 
 ---
 
@@ -54,7 +54,7 @@ NoneBot（OneBot v11 适配器）作为反向 WS **服务端**监听 8080，Lagr
 
 ```
 /data/
-├── venv/                 # Python 虚拟环境（依赖 + 插件）
+├── python-packages/      # 动态安装的 NoneBot 插件包
 ├── lagrange/             # Lagrange 工作目录
 │   ├── appsettings.json  # 反向 WS 指向 NoneBot
 │   ├── keystore.json     # 登录凭据（Lagrange 自动生成）
@@ -84,7 +84,7 @@ NoneBot（OneBot v11 适配器）作为反向 WS **服务端**监听 8080，Lagr
 > **HF Space 配置块**：本仓库 `README.md` 顶部已内置 HF 所需的 YAML 元数据
 > （`sdk: docker`、`app_port: 7860`）。新建 Docker Space 并推送本仓库后即可自动构建，无需额外配置端口。
 
-> **首次启动较慢**：首启会创建 venv、安装 NoneBot 等依赖、下载签名服务相关资源，请耐心等待。
+> **首次启动说明**：基础 Python/NoneBot 依赖已内置在镜像中；动态安装的插件会持久化到 `/data/python-packages`。
 
 ### 环境变量一览
 
