@@ -1,0 +1,162 @@
+"""Plugin management: install / uninstall / configure / toggle / restart."""
+
+import subprocess
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+from .. import auth, config, process_manager, utils
+
+router = APIRouter(
+    prefix="/plugins", tags=["plugins"], dependencies=[Depends(auth.require_auth)]
+)
+
+
+class NameBody(BaseModel):
+    name: str
+
+
+class ConfigBody(BaseModel):
+    name: str
+    config: Dict[str, Any] = {}
+
+
+class ToggleBody(BaseModel):
+    name: str
+    enabled: bool
+
+
+def _module_name(pkg_name: str) -> str:
+    """Convert a pip package name to its importable module name."""
+    return pkg_name.replace("-", "_")
+
+
+def _pip(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [config.PIP_BIN, *args],
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+
+
+def _detect_version(pkg_name: str) -> str:
+    try:
+        proc = _pip("show", pkg_name)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+    for line in (proc.stdout or "").splitlines():
+        if line.lower().startswith("version:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+@router.get("")
+def list_plugins():
+    return utils.read_plugins()
+
+
+@router.post("/install")
+def install_plugin(body: NameBody):
+    name = body.name.strip()
+    if not utils.valid_plugin_name(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    try:
+        proc = _pip("install", name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="pip not available")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="pip install timed out")
+    log = (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode != 0:
+        raise HTTPException(status_code=500, detail=log[-4000:] or "install failed")
+
+    data = utils.read_plugins()
+    plugins = data.setdefault("plugins", [])
+    entry = next((p for p in plugins if p.get("name") == name), None)
+    version = _detect_version(name)
+    if entry is None:
+        plugins.append(
+            {
+                "name": name,
+                "module": _module_name(name),
+                "version": version,
+                "enabled": True,
+                "config": {},
+            }
+        )
+    else:
+        entry["version"] = version
+        entry["enabled"] = True
+        entry.setdefault("module", _module_name(name))
+        entry.setdefault("config", {})
+    utils.write_plugins(data)
+    process_manager.restart_nonebot()
+    return {"ok": True, "log": log[-4000:]}
+
+
+@router.post("/uninstall")
+def uninstall_plugin(body: NameBody):
+    name = body.name.strip()
+    if not utils.valid_plugin_name(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    try:
+        proc = _pip("uninstall", "-y", name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="pip not available")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="pip uninstall timed out")
+    log = (proc.stdout or "") + (proc.stderr or "")
+
+    data = utils.read_plugins()
+    data["plugins"] = [p for p in data.get("plugins", []) if p.get("name") != name]
+    utils.write_plugins(data)
+    process_manager.restart_nonebot()
+    return {"ok": True, "log": log[-4000:]}
+
+
+@router.put("/config")
+def update_config(body: ConfigBody):
+    name = body.name.strip()
+    if not utils.valid_plugin_name(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    data = utils.read_plugins()
+    entry = next((p for p in data.get("plugins", []) if p.get("name") == name), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="plugin not installed")
+    entry["config"] = body.config
+
+    # Persist plugin config keys into the NoneBot .env so plugins can read them.
+    for key, value in body.config.items():
+        safe_key = str(key).strip()
+        if not safe_key:
+            continue
+        utils.update_env_file(config.ENV_FILE, safe_key.upper(), str(value))
+
+    utils.write_plugins(data)
+    process_manager.restart_nonebot()
+    return {"ok": True}
+
+
+@router.put("/toggle")
+def toggle_plugin(body: ToggleBody):
+    name = body.name.strip()
+    if not utils.valid_plugin_name(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    data = utils.read_plugins()
+    entry = next((p for p in data.get("plugins", []) if p.get("name") == name), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="plugin not installed")
+    entry["enabled"] = bool(body.enabled)
+    utils.write_plugins(data)
+    process_manager.restart_nonebot()
+    return {"ok": True}
+
+
+@router.post("/restart")
+def restart_plugins():
+    rc, output = process_manager.restart_nonebot()
+    if rc != 0:
+        raise HTTPException(status_code=500, detail=output or "restart failed")
+    return {"ok": True}
