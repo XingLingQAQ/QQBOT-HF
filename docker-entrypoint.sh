@@ -107,7 +107,7 @@ PY
 fi
 
 # 4. Render supervisord config (only the whitelisted vars are substituted).
-envsubst '${DATA_DIR} ${PYTHON_BIN} ${PYTHON_PACKAGES_DIR} ${PYTHONPATH} ${PORT} ${ADMIN_USER} ${ADMIN_PASS} ${STATIC_DIR}' \
+envsubst '${DATA_DIR} ${PYTHON_BIN} ${PORT}' \
   < "$TEMPLATES/supervisord.conf.template" \
   > "$DATA_DIR/manager/supervisord.conf"
 
