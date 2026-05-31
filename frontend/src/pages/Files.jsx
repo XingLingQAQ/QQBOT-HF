@@ -23,6 +23,7 @@ function fmtSize(n) {
 export default function Files() {
   const [path, setPath] = useState("");
   const [items, setItems] = useState([]);
+  const [limits, setLimits] = useState({ maxUploadFileSize: 50 * 1024 * 1024, maxUploadFiles: 20 });
   const [toast, setToast] = useState("");
   const [editing, setEditing] = useState(null); // {path, content}
   const [editContent, setEditContent] = useState("");
@@ -50,6 +51,9 @@ export default function Files() {
 
   useEffect(() => {
     load("");
+    api.get("/system/config")
+      .then(({ data }) => setLimits(data))
+      .catch(() => {});
   }, [load]);
 
   const enter = (item) => {
@@ -133,6 +137,15 @@ export default function Files() {
 
   const uploadFiles = async (files) => {
     if (!files || files.length === 0) return;
+    if (files.length > limits.maxUploadFiles) {
+      flash(`一次最多上传 ${limits.maxUploadFiles} 个文件`);
+      return;
+    }
+    const tooLarge = files.find((f) => f.size > limits.maxUploadFileSize);
+    if (tooLarge) {
+      flash(`${tooLarge.name} 超过 ${fmtSize(limits.maxUploadFileSize)} 限制`);
+      return;
+    }
     const form = new FormData();
     form.append("path", path);
     files.forEach((f) => form.append("files", f));
@@ -212,6 +225,9 @@ export default function Files() {
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
         >
+        <p className="hint-line">
+          文件管理限制在 /data 内；单文件上传上限 {fmtSize(limits.maxUploadFileSize)}，一次最多 {limits.maxUploadFiles} 个文件。
+        </p>
         {loading && <div className="empty">加载中…</div>}
         <table className="table">
           <thead>

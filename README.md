@@ -182,6 +182,7 @@ cd frontend && npm install && npm run build   # 输出 dist/
   如需长期稳定，建议挂载持久卷或自建部署。
 - **插件加载失败**：查看 `/data/manager/nonebot.log`，确认插件包名与模块名正确。
 - **修改配置后未生效**：插件相关操作会自动重启 NoneBot；也可在「插件管理」页点击「重启 NoneBot」。
-- **外部组件版本**：Lagrange.OneBot（linux-x64 self-contained nightly）与签名服务地址
-  `https://sign.lagrangecore.org/api/sign` 在实现时通过 MCP 核实；如上游变更，请相应更新
-  `Dockerfile` 的 `LAGRANGE_URL` 与 `appsettings.json` 的 `SignServerUrl`。
+- **外部组件版本与容器内更新**：Lagrange.OneBot（linux-x64 self-contained nightly）下载地址、NoneBot2
+  与 `nonebot-adapter-onebot` 适配器在实现时通过 MCP 核实。默认签名服务地址为
+  `https://sign.lagrangecore.org/api/sign/39038`，旧的 `/30366` 会在首次启动时自动迁移。
+  如上游变更，可在「总览」页执行「修复 Lagrange 配置」「更新 Lagrange」或「更新 NoneBot/依赖」。

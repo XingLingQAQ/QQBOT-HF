@@ -21,6 +21,8 @@ PYTHON_BIN = os.path.join(VENV_DIR, "bin", "python")
 QRCODE_PATH = os.path.join(LAGRANGE_DIR, "qr-0.png")
 KEYSTORE_PATH = os.path.join(LAGRANGE_DIR, "keystore.json")
 ENV_FILE = os.path.join(NONEBOT_DIR, ".env")
+APPSETTINGS_PATH = os.path.join(LAGRANGE_DIR, "appsettings.json")
+LAGRANGE_BIN = os.environ.get("LAGRANGE_BIN", "/opt/lagrange/Lagrange.OneBot")
 
 # --- Admin credentials (env-injected, defaults per spec) ---
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
@@ -46,6 +48,19 @@ PROG_NONEBOT = "nonebot"
 
 # Maximum size for text file read/write via the file manager (2 MB).
 MAX_TEXT_FILE_SIZE = 2 * 1024 * 1024
+MAX_UPLOAD_FILE_SIZE = int(os.environ.get("MAX_UPLOAD_FILE_SIZE", str(50 * 1024 * 1024)))
+MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20"))
+
+# Lagrange.OneBot runtime update/config defaults.
+LAGRANGE_RELEASE_URL = os.environ.get(
+    "LAGRANGE_RELEASE_URL",
+    "https://github.com/LagrangeDev/Lagrange.Core/releases/download/nightly/"
+    "Lagrange.OneBot_linux-x64_net9.0_SelfContained.tar.gz",
+)
+LAGRANGE_SIGN_SERVER_URL = os.environ.get(
+    "LAGRANGE_SIGN_SERVER_URL",
+    "https://sign.lagrangecore.org/api/sign/39038",
+)
 
 # QR code expiry threshold (seconds). A pending qr older than this with no
 # successful login is considered expired.

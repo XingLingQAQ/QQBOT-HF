@@ -12,15 +12,20 @@ const PROCS = [
 export default function Overview() {
   const [status, setStatus] = useState({});
   const [login, setLogin] = useState({ status: "offline", qq: "", nickname: "" });
+  const [systemConfig, setSystemConfig] = useState(null);
+  const [updateBusy, setUpdateBusy] = useState("");
+  const [updateMsg, setUpdateMsg] = useState("");
 
   const tick = useCallback(async () => {
     try {
-      const [s, l] = await Promise.all([
+      const [s, l, c] = await Promise.all([
         api.get("/status"),
         api.get("/login-status"),
+        api.get("/system/config"),
       ]);
       setStatus(s.data);
       setLogin(l.data);
+      setSystemConfig(c.data);
     } catch {
       /* ignore */
     }
@@ -35,6 +40,39 @@ export default function Overview() {
   const badge = loginState(login.status);
   const online = login.status === "online";
   const avatar = online ? qqAvatar(login.qq) : "";
+
+  const runMaintenance = async (kind) => {
+    const map = {
+      repair: {
+        label: "修复 Lagrange 配置",
+        url: "/system/repair-lagrange-config",
+        confirm: "将修复 Lagrange 反向 WS 与签名服务配置并重启 Lagrange，继续？",
+      },
+      lagrange: {
+        label: "更新 Lagrange",
+        url: "/system/update-lagrange",
+        confirm: "将从官方 nightly 下载并替换容器内 Lagrange.OneBot，然后重启，继续？",
+      },
+      deps: {
+        label: "更新 NoneBot/依赖",
+        url: "/system/update-python-deps",
+        confirm: "将升级 /data/venv 内的 FastAPI、NoneBot2 与 OneBot 适配器并重启服务，继续？",
+      },
+    };
+    const item = map[kind];
+    if (!item || !window.confirm(item.confirm)) return;
+    setUpdateBusy(kind);
+    setUpdateMsg("");
+    try {
+      await api.post(item.url, {});
+      setUpdateMsg(`${item.label}已完成。`);
+      await tick();
+    } catch (e) {
+      setUpdateMsg(e?.response?.data?.detail || `${item.label}失败`);
+    } finally {
+      setUpdateBusy("");
+    }
+  };
 
   return (
     <div className="page">
@@ -72,6 +110,32 @@ export default function Overview() {
               </div>
             );
           })}
+        </Card>
+
+        <Card title="容器内组件更新">
+          <div className="kv">
+            <span>签名服务</span>
+            <code className="inline-code">{systemConfig?.lagrangeSignServerUrl || "—"}</code>
+          </div>
+          <div className="kv">
+            <span>NoneBot 适配器</span>
+            <span>{systemConfig?.nonebotAdapter || "—"}</span>
+          </div>
+          <div className="maintenance-actions">
+            <button className="btn" disabled={!!updateBusy} onClick={() => runMaintenance("repair")}>
+              {updateBusy === "repair" ? "处理中…" : "修复 Lagrange 配置"}
+            </button>
+            <button className="btn" disabled={!!updateBusy} onClick={() => runMaintenance("lagrange")}>
+              {updateBusy === "lagrange" ? "更新中…" : "更新 Lagrange"}
+            </button>
+            <button className="btn" disabled={!!updateBusy} onClick={() => runMaintenance("deps")}>
+              {updateBusy === "deps" ? "更新中…" : "更新 NoneBot/依赖"}
+            </button>
+          </div>
+          <p className="hint-line">
+            更新操作只影响容器内持久化环境：Lagrange 二进制位于 /opt/lagrange，NoneBot 与适配器位于 /data/venv。
+          </p>
+          {updateMsg && <p className="hint-line info">{updateMsg}</p>}
         </Card>
 
         <Card title="登录信息">

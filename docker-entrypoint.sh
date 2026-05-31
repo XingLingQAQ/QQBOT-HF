@@ -39,10 +39,59 @@ fi
 [ -f "$DATA_DIR/lagrange/appsettings.json" ] || cp "$TEMPLATES/appsettings.json.template" "$DATA_DIR/lagrange/appsettings.json"
 [ -f "$DATA_DIR/plugins.json" ]              || echo '{"plugins":[]}' > "$DATA_DIR/plugins.json"
 
+# Keep first-run and old persisted Lagrange configs aligned with the current
+# in-container NoneBot reverse-WS wiring, without overwriting custom sign URLs
+# unless they are empty or known legacy defaults.
+"$VENV_DIR/bin/python" - "$DATA_DIR/lagrange/appsettings.json" "${LAGRANGE_SIGN_SERVER_URL:-https://sign.lagrangecore.org/api/sign/39038}" <<'PY'
+import json, os, sys
+
+path, default_sign = sys.argv[1], sys.argv[2]
+old_sign_urls = {"", "https://sign.lagrangecore.org/api/sign", "https://sign.lagrangecore.org/api/sign/30366"}
+try:
+    with open(path, encoding="utf-8") as fh:
+        cfg = json.load(fh)
+except Exception:
+    cfg = {}
+if not isinstance(cfg, dict):
+    cfg = {}
+if cfg.get("SignServerUrl") in old_sign_urls:
+    cfg["SignServerUrl"] = default_sign
+cfg.setdefault("Logging", {"LogLevel": {"Default": "Information", "Microsoft": "Warning"}})
+cfg.setdefault("SignProxyUrl", "")
+cfg.setdefault("MusicSignServerUrl", "")
+cfg.setdefault("Account", {"Uin": 0, "Protocol": "Linux", "AutoReconnect": True})
+cfg.setdefault("Message", {"IgnoreSelf": True})
+cfg.setdefault("QrCode", {"ConsoleCompatibilityMode": False})
+impls = cfg.setdefault("Implementations", [])
+if not isinstance(impls, list):
+    impls = []
+    cfg["Implementations"] = impls
+reverse = next((x for x in impls if isinstance(x, dict) and x.get("Type") == "ReverseWebSocket"), None)
+desired = {
+    "Type": "ReverseWebSocket",
+    "Host": "127.0.0.1",
+    "Port": 8080,
+    "Suffix": "/onebot/v11/ws",
+    "ReconnectInterval": 5000,
+    "HeartBeatInterval": 5000,
+    "AccessToken": "",
+}
+if reverse is None:
+    impls.append(desired)
+else:
+    reverse.update(desired)
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
+    json.dump(cfg, fh, ensure_ascii=False, indent=2)
+    fh.write("\n")
+os.replace(tmp, path)
+PY
+
 # 3b. Install any enabled plugins recorded in the manifest (idempotent).
 if [ -f "$DATA_DIR/plugins.json" ] && [ -x "$VENV_DIR/bin/python" ]; then
   mapfile -t PLUGIN_NAMES < <("$VENV_DIR/bin/python" - "$DATA_DIR/plugins.json" <<'PY'
-import json, sys
+import json, re, sys
+plugin_re = re.compile(r"^nonebot[-_]plugin[-_][A-Za-z0-9_-]+$")
 try:
     with open(sys.argv[1], encoding="utf-8") as fh:
         cfg = json.load(fh)
@@ -50,7 +99,7 @@ except Exception:
     cfg = {"plugins": []}
 for p in cfg.get("plugins", []):
     name = (p.get("name") or "").strip()
-    if name and p.get("enabled", True):
+    if name and p.get("enabled", True) and plugin_re.match(name):
         print(name)
 PY
 )

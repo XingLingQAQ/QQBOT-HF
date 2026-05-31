@@ -129,10 +129,14 @@ def update_config(body: ConfigBody):
 
     # Persist plugin config keys into the NoneBot .env so plugins can read them.
     for key, value in body.config.items():
-        safe_key = str(key).strip()
-        if not safe_key:
-            continue
-        utils.update_env_file(config.ENV_FILE, safe_key.upper(), str(value))
+        safe_key = str(key).strip().upper()
+        if not utils.valid_env_key(safe_key):
+            raise HTTPException(status_code=400, detail=f"invalid config key: {key}")
+        if isinstance(value, (dict, list)):
+            raise HTTPException(status_code=400, detail=f"invalid scalar value for: {key}")
+        if value is not None and not isinstance(value, (str, int, float, bool)):
+            raise HTTPException(status_code=400, detail=f"invalid config value for: {key}")
+        utils.update_env_file(config.ENV_FILE, safe_key, str(value))
 
     utils.write_plugins(data)
     process_manager.restart_nonebot()
