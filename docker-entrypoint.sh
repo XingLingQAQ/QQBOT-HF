@@ -28,7 +28,11 @@ echo "[entrypoint] preparing $DATA_DIR ..."
 # 1. Directory layout
 mkdir -p "$DATA_DIR/lagrange" \
          "$DATA_DIR/nonebot/data" \
-         "$DATA_DIR/manager"
+         "$DATA_DIR/manager" \
+         "$DATA_DIR/napcat/config" \
+         "$DATA_DIR/napcat/cache" \
+         "$DATA_DIR/napcat/logs" \
+         "$DATA_DIR/napcat/home"
 
 # 2. Runtime dependencies are installed in the image. Plugins are persisted as
 # importable packages under /data/python-packages so no script in /data needs to
@@ -38,16 +42,24 @@ mkdir -p "$DATA_DIR/lagrange" \
 [ -f "$DATA_DIR/nonebot/bot.py" ]            || cp "$TEMPLATES/bot.py.template"          "$DATA_DIR/nonebot/bot.py"
 [ -f "$DATA_DIR/nonebot/.env" ]              || cp "$TEMPLATES/env.template"             "$DATA_DIR/nonebot/.env"
 [ -f "$DATA_DIR/lagrange/appsettings.json" ] || cp "$TEMPLATES/appsettings.json.template" "$DATA_DIR/lagrange/appsettings.json"
+[ -f "$DATA_DIR/napcat/config/onebot11.json" ] || cp "$TEMPLATES/onebot11.json.template" "$DATA_DIR/napcat/config/onebot11.json"
 [ -f "$DATA_DIR/plugins.json" ]              || echo '{"plugins":[]}' > "$DATA_DIR/plugins.json"
 
 # Keep first-run and old persisted Lagrange configs aligned with the current
 # in-container NoneBot reverse-WS wiring, without overwriting custom sign URLs
-# unless they are empty or known legacy defaults.
-"$PYTHON_BIN" - "$DATA_DIR/lagrange/appsettings.json" "${LAGRANGE_SIGN_SERVER_URL:-https://sign.lagrangecore.org/api/sign/39038}" <<'PY'
+# unless they are empty or known legacy defaults. The default points at the
+# self-hosted SignServer (127.0.0.1:8087); legacy official URLs are migrated to
+# it since the central sign server is offline.
+"$PYTHON_BIN" - "$DATA_DIR/lagrange/appsettings.json" "${LAGRANGE_SIGN_SERVER_URL:-http://127.0.0.1:${SIGNSERVER_PORT:-8087}}" <<'PY'
 import json, os, sys
 
 path, default_sign = sys.argv[1], sys.argv[2]
-old_sign_urls = {"", "https://sign.lagrangecore.org/api/sign", "https://sign.lagrangecore.org/api/sign/30366"}
+old_sign_urls = {
+    "",
+    "https://sign.lagrangecore.org/api/sign",
+    "https://sign.lagrangecore.org/api/sign/30366",
+    "https://sign.lagrangecore.org/api/sign/39038",
+}
 try:
     with open(path, encoding="utf-8") as fh:
         cfg = json.load(fh)
@@ -88,6 +100,19 @@ with open(tmp, "w", encoding="utf-8") as fh:
 os.replace(tmp, path)
 PY
 
+# 3a. QQ protocol backend selection (persisted). Defaults to lagrange so the
+# existing behaviour is unchanged; napcat starts disabled.
+[ -f "$DATA_DIR/manager/protocol.json" ]     || echo '{"protocol":"lagrange"}' > "$DATA_DIR/manager/protocol.json"
+PROTOCOL=$(sed -n 's/.*"protocol"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$DATA_DIR/manager/protocol.json")
+[ "$PROTOCOL" = "napcat" ] || PROTOCOL="lagrange"
+if [ "$PROTOCOL" = "napcat" ]; then
+  AUTOSTART_LAGRANGE="false"; AUTOSTART_SIGNSERVER="false"; AUTOSTART_NAPCAT="true"
+else
+  AUTOSTART_LAGRANGE="true";  AUTOSTART_SIGNSERVER="true";  AUTOSTART_NAPCAT="false"
+fi
+export AUTOSTART_LAGRANGE AUTOSTART_SIGNSERVER AUTOSTART_NAPCAT
+echo "[entrypoint] QQ protocol backend: $PROTOCOL"
+
 # 3b. Install any enabled plugins recorded in the manifest (idempotent).
 if [ -f "$DATA_DIR/plugins.json" ]; then
   mapfile -t PLUGIN_NAMES < <("$PYTHON_BIN" - "$DATA_DIR/plugins.json" <<'PY'
@@ -112,7 +137,7 @@ PY
 fi
 
 # 4. Render supervisord config (only the whitelisted vars are substituted).
-envsubst '${DATA_DIR} ${PYTHON_BIN} ${PORT}' \
+envsubst '${DATA_DIR} ${PYTHON_BIN} ${PORT} ${AUTOSTART_LAGRANGE} ${AUTOSTART_SIGNSERVER} ${AUTOSTART_NAPCAT}' \
   < "$TEMPLATES/supervisord.conf.template" \
   > "$DATA_DIR/manager/supervisord.conf"
 

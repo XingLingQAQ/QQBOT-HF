@@ -2,11 +2,20 @@ import { useEffect, useState } from "react";
 import api from "../api";
 import { procState } from "../format";
 
-const ROWS = [
-  { key: "lagrange", label: "Lagrange" },
-  { key: "nonebot", label: "NoneBot" },
-  { key: "backend", label: "后端" },
-];
+function rowsFor(protocol) {
+  const common = [
+    { key: "nonebot", label: "NoneBot" },
+    { key: "backend", label: "后端" },
+  ];
+  if (protocol === "napcat") {
+    return [{ key: "napcat", label: "NapCat" }, ...common];
+  }
+  return [
+    { key: "lagrange", label: "Lagrange" },
+    { key: "signserver", label: "签名服务" },
+    ...common,
+  ];
+}
 
 export default function StatusLights() {
   const [status, setStatus] = useState({});
@@ -31,7 +40,7 @@ export default function StatusLights() {
 
   return (
     <div className="status-lights">
-      {ROWS.map(({ key, label }) => {
+      {rowsFor(status.protocol).map(({ key, label }) => {
         const s = procState(status[key]);
         return (
           <div className="status-row" key={key} title={status[key] || "未知"}>
