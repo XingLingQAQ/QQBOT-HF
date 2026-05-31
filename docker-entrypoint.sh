@@ -14,6 +14,11 @@ ADMIN_PASS="${ADMIN_PASS:-admin123}"
 STATIC_DIR="${STATIC_DIR:-/app/static}"
 TEMPLATES="/app/backend/app/templates"
 
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+  echo "[entrypoint] WARN: invalid PORT=$PORT, falling back to 7860"
+  PORT=7860
+fi
+
 mkdir -p "$PYTHON_PACKAGES_DIR"
 export DATA_DIR PYTHON_BIN PYTHON_PACKAGES_DIR PORT ADMIN_USER ADMIN_PASS STATIC_DIR
 export PYTHONPATH="$PYTHON_PACKAGES_DIR${PYTHONPATH:+:$PYTHONPATH}"
@@ -107,7 +112,7 @@ PY
 fi
 
 # 4. Render supervisord config (only the whitelisted vars are substituted).
-envsubst '${DATA_DIR} ${PYTHON_BIN} ${PYTHON_PACKAGES_DIR} ${PYTHONPATH} ${PORT} ${ADMIN_USER} ${ADMIN_PASS} ${STATIC_DIR}' \
+envsubst '${DATA_DIR} ${PYTHON_BIN} ${PORT}' \
   < "$TEMPLATES/supervisord.conf.template" \
   > "$DATA_DIR/manager/supervisord.conf"
 

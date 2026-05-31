@@ -25,7 +25,6 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/backend.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-environment=DATA_DIR="${DATA_DIR}",STATIC_DIR="${STATIC_DIR}",PYTHON_BIN="${PYTHON_BIN}",PYTHON_PACKAGES_DIR="${PYTHON_PACKAGES_DIR}",PYTHONPATH="${PYTHONPATH}",PORT="${PORT}",ADMIN_USER="${ADMIN_USER}",ADMIN_PASS="${ADMIN_PASS}"
 
 [program:lagrange]
 command=/opt/lagrange/Lagrange.OneBot
@@ -39,7 +38,6 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/lagrange.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-environment=DATA_DIR="${DATA_DIR}",LAGRANGE_SIGN_SERVER_URL="https://sign.lagrangecore.org/api/sign/39038"
 
 [program:nonebot]
 command=${PYTHON_BIN} bot.py
@@ -53,6 +51,6 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/nonebot.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-# HOST/PORT are forced here so NoneBot binds its reverse-WS server on
+# HOST/PORT are forced in the command so NoneBot binds its reverse-WS server on
 # 127.0.0.1:8080 and does NOT inherit the container's PORT (7860, the backend).
-environment=DATA_DIR="${DATA_DIR}",PYTHON_BIN="${PYTHON_BIN}",PYTHON_PACKAGES_DIR="${PYTHON_PACKAGES_DIR}",PYTHONPATH="${PYTHONPATH}",HOST="127.0.0.1",PORT="8080"
+environment=HOST="127.0.0.1",PORT="8080"

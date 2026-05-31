@@ -110,13 +110,14 @@ HF 免费 Space 在连续 **48 小时无外部请求**后会休眠。请使用**
 
 ## GitHub Actions（构建镜像）
 
-工作流 `.github/workflows/docker-build.yml` 会在向 `main` 推送或提交 PR 时构建镜像以验证可构建性。
-如需推送到 Docker Hub，请在仓库 **Settings → Secrets and variables → Actions** 配置：
+工作流 `.github/workflows/docker-build.yml` 会在 PR 中构建镜像以验证可构建性；向 `main` 推送或手动触发时会发布
+`ghcr.io/xinglingqaq/qqbot-hf:latest` 与对应提交 SHA 标签到 GitHub Packages。
+如需额外推送到 Docker Hub，请在仓库 **Settings → Secrets and variables → Actions** 配置：
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
 
-未配置时工作流仅构建、不推送。
+未配置 Docker Hub secrets 时，只发布 GitHub Packages。
 
 ---
 

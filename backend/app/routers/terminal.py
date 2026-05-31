@@ -26,6 +26,14 @@ from .. import auth, config
 router = APIRouter()
 
 
+def _bounded_int(value: object, default: int, minimum: int, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(maximum, number))
+
+
 def _set_winsize(fd: int, rows: int, cols: int) -> None:
     try:
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
@@ -93,8 +101,8 @@ async def terminal_ws(websocket: WebSocket):
             if isinstance(payload, dict):
                 mtype = payload.get("type")
                 if mtype == "resize":
-                    rows = int(payload.get("rows", 24) or 24)
-                    cols = int(payload.get("cols", 80) or 80)
+                    rows = _bounded_int(payload.get("rows"), 24, 5, 120)
+                    cols = _bounded_int(payload.get("cols"), 80, 20, 300)
                     _set_winsize(master_fd, rows, cols)
                     continue
                 if mtype == "input":
