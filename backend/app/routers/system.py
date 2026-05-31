@@ -22,10 +22,14 @@ class UpdateLagrangeBody(BaseModel):
     url: Optional[str] = None
 
 
+# Sign URLs considered "stale defaults" that the repair flow may overwrite with
+# the self-hosted SignServer. The official central server is offline, so its
+# URLs are migrated to the local one too; custom user URLs are left untouched.
 _OLD_SIGN_URLS = {
     "",
     "https://sign.lagrangecore.org/api/sign",
     "https://sign.lagrangecore.org/api/sign/30366",
+    "https://sign.lagrangecore.org/api/sign/39038",
 }
 
 
@@ -168,6 +172,9 @@ def status():
         "lagrange": process_manager.get_status(config.PROG_LAGRANGE),
         "nonebot": process_manager.get_status(config.PROG_NONEBOT),
         "backend": process_manager.get_status(config.PROG_BACKEND),
+        "signserver": process_manager.get_status(config.PROG_SIGNSERVER),
+        "napcat": process_manager.get_status(config.PROG_NAPCAT),
+        "protocol": config.read_protocol(),
     }
 
 

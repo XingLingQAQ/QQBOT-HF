@@ -26,10 +26,28 @@ stdout_logfile=${DATA_DIR}/manager/backend.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 
+[program:signserver]
+# Self-hosted VincentZyu233/SignServer. It dlopen()s ./wrapper.node and reads
+# sign.config.toml from the CWD, so it must run from the QQ app directory where
+# wrapper.node (and its sibling libs) live. The sign binary + libsymbols.so +
+# sign.config.toml are placed there at build time.
+command=/opt/QQ/resources/app/sign
+directory=/opt/QQ/resources/app
+autostart=${AUTOSTART_SIGNSERVER}
+autorestart=true
+startsecs=3
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=${DATA_DIR}/manager/signserver.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+environment=LD_LIBRARY_PATH="/opt/QQ/resources/app:/opt/QQ"
+
 [program:lagrange]
 command=/opt/lagrange/Lagrange.OneBot
 directory=${DATA_DIR}/lagrange
-autostart=true
+autostart=${AUTOSTART_LAGRANGE}
 autorestart=true
 startsecs=3
 stopasgroup=true
@@ -38,6 +56,20 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/lagrange.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
+
+[program:napcat]
+command=/opt/napcat/napcat-run.sh
+directory=/opt/napcat
+autostart=${AUTOSTART_NAPCAT}
+autorestart=true
+startsecs=5
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=${DATA_DIR}/manager/napcat.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+environment=NAPCAT_WORKDIR="${DATA_DIR}/napcat",NAPCAT_WRAPPER_PATH="/opt/QQ/resources/app/wrapper.node",HOME="${DATA_DIR}/napcat/home",DISPLAY=":1",FFMPEG_PATH="/usr/bin/ffmpeg"
 
 [program:nonebot]
 command=${PYTHON_BIN} bot.py

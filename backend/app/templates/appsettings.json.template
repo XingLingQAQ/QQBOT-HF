@@ -6,7 +6,7 @@
       "Microsoft": "Warning"
     }
   },
-  "SignServerUrl": "https://sign.lagrangecore.org/api/sign/39038",
+  "SignServerUrl": "http://127.0.0.1:8087",
   "SignProxyUrl": "",
   "MusicSignServerUrl": "",
   "Account": {

@@ -8,7 +8,25 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build          # output: /build/dist
 
-# ---------- Stage 2: runtime ----------
+# ---------- Stage 2: build the self-hosted SignServer ----------
+# VincentZyu233/SignServer is Rust (edition 2024) + a tiny C shim. We build the
+# `sign` binary and `libsymbols.so` here; at runtime they sit next to QQ's
+# wrapper.node. The offset in sign.config.toml is locked to QQ 3.2.19-39038.
+FROM rust:1-slim-bookworm AS signserver
+ARG SIGNSERVER_REPO="https://github.com/VincentZyu233/SignServer"
+ARG SIGNSERVER_REF="a074cf09df8e6081b056a69b99e35f13f1df167c"
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git gcc ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone "$SIGNSERVER_REPO" . && git checkout "$SIGNSERVER_REF"
+RUN gcc -std=c99 -shared -fPIC -o libsymbols.so symbols.c && \
+    cargo build --release && \
+    mkdir -p /out && \
+    cp target/release/sign /out/sign && \
+    cp libsymbols.so /out/libsymbols.so
+
+# ---------- Stage 3: runtime ----------
 FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -20,9 +38,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Runtime deps:
 #  - libicu-dev: required by the .NET self-contained Lagrange.OneBot binary
 #  - gettext-base: provides `envsubst` used by the entrypoint
-#  - procps/bash/curl/tar/gzip/ca-certificates: tooling & TLS for sign server
+#  - procps/bash/curl/tar/gzip/unzip/ca-certificates: tooling & TLS
+#  - GUI/Electron libs + xvfb + ffmpeg + fonts + dbus: required to run the
+#    official Linux QQ (Electron) headless for NapCatQQ
+#  - libgnutls30: provides libgnutls.so.30 preloaded by the sign server
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl bash procps libicu-dev tar gzip gettext-base \
+      ca-certificates curl bash procps libicu-dev tar gzip unzip gettext-base \
+      libgnutls30 gnutls-bin \
+      xvfb ffmpeg dbus dbus-x11 \
+      libnss3 libnotify4 libsecret-1-0 libgbm1 libasound2 \
+      libglib2.0-0 libdbus-1-3 libgtk-3-0 libxss1 libxtst6 libatspi2.0-0 \
+      libx11-xcb1 fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-install runtime Python dependencies into the image. Do not run app
@@ -35,7 +61,6 @@ RUN pip install --no-cache-dir \
       "nonebot2>=2.5.0" "nonebot-adapter-onebot>=2.4.6"
 
 # Download Lagrange.OneBot (linux-x64, self-contained net9.0 nightly).
-# URL fetched/verified via MCP (LagrangeDev/Lagrange.Core nightly release).
 ARG LAGRANGE_URL="https://github.com/LagrangeDev/Lagrange.Core/releases/download/nightly/Lagrange.OneBot_linux-x64_net9.0_SelfContained.tar.gz"
 RUN mkdir -p /opt/lagrange /tmp/lg && \
     curl -fL -o /tmp/lagrange.tar.gz "$LAGRANGE_URL" && \
@@ -46,16 +71,49 @@ RUN mkdir -p /opt/lagrange /tmp/lg && \
     chmod +x /opt/lagrange/Lagrange.OneBot && \
     rm -rf /tmp/lagrange.tar.gz /tmp/lg
 
+# Install the official Linux QQ. The exact build 3.2.19-39038 is required: the
+# sign server's memory offset is reverse-engineered for it, and NapCat 4.18.x
+# lists it as a supported version. URL + sha512 sourced from the AUR linuxqq
+# package history (commit pinning build 39038).
+ARG QQ_DEB_URL="https://dldir1.qq.com/qqfile/qq/QQNT/c773cdf7/linuxqq_3.2.19-39038_amd64.deb"
+ARG QQ_DEB_SHA512="49175b7a0197cb5730962bd8e0c77e7a84bb5a546f6780322f9278600700ba0a625544dd0704ad579bcfdf5bd934eaef7d69c2998d0c7ff481477db44c50aca5"
+RUN for i in 1 2 3 4 5; do \
+        curl --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 600 -fL -o /tmp/linuxqq.deb "$QQ_DEB_URL" && break || \
+        (echo "QQ download attempt $i failed, retrying in 10s..." && sleep 10); \
+    done && \
+    echo "${QQ_DEB_SHA512}  /tmp/linuxqq.deb" | sha512sum -c - && \
+    dpkg -i --force-depends /tmp/linuxqq.deb && \
+    rm -f /tmp/linuxqq.deb
+
+# Place the sign server next to QQ's wrapper.node (its required CWD) + config.
+COPY --from=signserver /out/sign /opt/QQ/resources/app/sign
+COPY --from=signserver /out/libsymbols.so /opt/QQ/resources/app/libsymbols.so
+COPY backend/app/templates/sign.config.toml.template /opt/QQ/resources/app/sign.config.toml
+RUN chmod +x /opt/QQ/resources/app/sign
+
+# Install NapCatQQ (Shell) and patch QQ to load it on startup.
+ARG NAPCAT_URL="https://github.com/NapNeko/NapCatQQ/releases/download/v4.18.4/NapCat.Shell.zip"
+RUN mkdir -p /opt/napcat && \
+    curl -fL -o /tmp/napcat.zip "$NAPCAT_URL" && \
+    unzip -q /tmp/napcat.zip -d /opt/napcat && \
+    rm -f /tmp/napcat.zip && \
+    echo "(async () => {await import('file:///opt/napcat/napcat.mjs');})();" > /opt/QQ/resources/app/loadNapCat.js && \
+    sed -i 's|"main": "[^"]*"|"main": "./loadNapCat.js"|' /opt/QQ/resources/app/package.json
+
+COPY scripts/napcat-run.sh /opt/napcat/napcat-run.sh
+RUN chmod +x /opt/napcat/napcat-run.sh
+
 WORKDIR /app
 COPY backend/ /app/backend/
 COPY --from=frontend /build/dist /app/static
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Non-root user; /data is the persistent mount.
+# Non-root user; /data is the persistent mount. /opt/QQ must be writable by the
+# runtime user (QQ writes its profile/cache, the sign server appends a log).
 RUN useradd -m -u 1000 appuser && \
     mkdir -p /data && \
-    chown -R appuser:appuser /data /app /opt/lagrange
+    chown -R appuser:appuser /data /app /opt/lagrange /opt/napcat /opt/QQ
 USER appuser
 
 EXPOSE 7860

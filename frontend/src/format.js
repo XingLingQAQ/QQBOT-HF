@@ -29,6 +29,22 @@ export function loginState(status) {
   return LOGIN_STATES[status] || LOGIN_STATES.offline;
 }
 
+// QQ protocol backend metadata (selector labels + descriptions).
+export const PROTOCOLS = {
+  lagrange: {
+    label: "Lagrange.OneBot",
+    desc: "搭配自建签名服务（VincentZyu233/SignServer）使用",
+  },
+  napcat: {
+    label: "NapCatQQ",
+    desc: "基于官方 QQ 注入，无需签名服务；选用后 Lagrange 及签名服务停止",
+  },
+};
+
+export function protocolLabel(p) {
+  return (PROTOCOLS[p] && PROTOCOLS[p].label) || p || "未知";
+}
+
 // QQ avatar URL (public endpoint). Returns empty string when no uin.
 export function qqAvatar(uin) {
   const u = String(uin || "").trim();

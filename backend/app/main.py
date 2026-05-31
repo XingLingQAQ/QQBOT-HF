@@ -15,6 +15,7 @@ from . import config
 from .routers import auth as auth_router
 from .routers import files as files_router
 from .routers import plugins as plugins_router
+from .routers import protocol as protocol_router
 from .routers import qrcode as qrcode_router
 from .routers import system as system_router
 from .routers import terminal as terminal_router
@@ -26,6 +27,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(qrcode_router.router, prefix="/api")
 app.include_router(plugins_router.router, prefix="/api")
 app.include_router(system_router.router, prefix="/api")
+app.include_router(protocol_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(terminal_router.router)  # /ws/terminal
 

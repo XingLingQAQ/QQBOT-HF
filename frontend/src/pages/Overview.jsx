@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
+import ProtocolSelector from "../components/ProtocolSelector.jsx";
 import api from "../api";
 import { loginState, procState, qqAvatar } from "../format";
 
-const PROCS = [
-  { key: "lagrange", label: "Lagrange.OneBot" },
-  { key: "nonebot", label: "NoneBot" },
-  { key: "backend", label: "后端服务" },
-];
+// Process rows shown for each protocol backend (nonebot + backend are common).
+function procRows(protocol) {
+  const common = [
+    { key: "nonebot", label: "NoneBot" },
+    { key: "backend", label: "后端服务" },
+  ];
+  if (protocol === "napcat") {
+    return [{ key: "napcat", label: "NapCatQQ" }, ...common];
+  }
+  return [
+    { key: "lagrange", label: "Lagrange.OneBot" },
+    { key: "signserver", label: "签名服务" },
+    ...common,
+  ];
+}
 
 export default function Overview() {
   const [status, setStatus] = useState({});
@@ -40,6 +51,7 @@ export default function Overview() {
   const badge = loginState(login.status);
   const online = login.status === "online";
   const avatar = online ? qqAvatar(login.qq) : "";
+  const PROCS = procRows(status.protocol);
 
   const runMaintenance = async (kind) => {
     const map = {
@@ -152,6 +164,8 @@ export default function Overview() {
             <span>{login.nickname || "—"}</span>
           </div>
         </Card>
+
+        <ProtocolSelector onChanged={tick} />
       </div>
 
       <Card title="保活提示" className="hint-card">
