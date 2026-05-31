@@ -11,11 +11,11 @@ from typing import Tuple
 
 from . import config
 
-_SERVERURL = f"unix://{config.SUPERVISOR_SOCK}"
+_SERVERURL = f"http://{config.SUPERVISOR_HOST}:{config.SUPERVISOR_PORT}"
 
 
 def _supervisorctl(*args: str) -> Tuple[int, str]:
-    """Run ``supervisorctl -s <sock> <args...>`` and return (rc, combined output)."""
+    """Run ``supervisorctl -s <server> <args...>`` and return (rc, combined output)."""
     cmd = ["supervisorctl", "-s", _SERVERURL, *args]
     try:
         proc = subprocess.run(

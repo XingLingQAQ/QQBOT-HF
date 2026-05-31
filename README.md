@@ -42,6 +42,7 @@ pinned: false
 | NoneBot 内部端口 | `8080` | 仅容器内监听，反向 WS 服务端 |
 | Lagrange → NoneBot | `ws://127.0.0.1:8080/onebot/v11/ws` | 反向 WebSocket |
 | Access Token | 留空（仅本机） | 两端需一致 |
+| supervisord 控制端口 | `127.0.0.1:9001` | 仅容器内监听，供后端调用 `supervisorctl` |
 
 NoneBot（OneBot v11 适配器）作为反向 WS **服务端**监听 8080，Lagrange.OneBot 连接进来。两者均不对外暴露。
 

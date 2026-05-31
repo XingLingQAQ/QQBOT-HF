@@ -38,7 +38,8 @@ STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
 # --- Session / supervisor ---
 SESSION_COOKIE = "qqbot_session"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
-SUPERVISOR_SOCK = os.path.join(MANAGER_DIR, "supervisor.sock")
+SUPERVISOR_HOST = os.environ.get("SUPERVISOR_HOST", "127.0.0.1")
+SUPERVISOR_PORT = int(os.environ.get("SUPERVISOR_PORT", "9001"))
 SECRET_KEY_PATH = os.path.join(MANAGER_DIR, "secret_key")
 
 # Supervisor program names (internal constants, never derived from user input).

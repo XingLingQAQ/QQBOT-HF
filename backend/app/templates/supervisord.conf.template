@@ -4,11 +4,11 @@ logfile=${DATA_DIR}/manager/supervisord.log
 pidfile=${DATA_DIR}/manager/supervisord.pid
 childlogdir=${DATA_DIR}/manager
 
-[unix_http_server]
-file=${DATA_DIR}/manager/supervisor.sock
+[inet_http_server]
+port=127.0.0.1:9001
 
 [supervisorctl]
-serverurl=unix://${DATA_DIR}/manager/supervisor.sock
+serverurl=http://127.0.0.1:9001
 
 [rpcinterface:supervisor]
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
