@@ -81,6 +81,8 @@ async def write_file(body: WriteBody):
     target = utils.safe_join(config.DATA_DIR, body.path)
     if os.path.isdir(target):
         raise HTTPException(status_code=400, detail="path is a directory")
+    if len(body.content.encode("utf-8")) > config.MAX_TEXT_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="content too large")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     async with aiofiles.open(target, "w", encoding="utf-8") as fh:
         await fh.write(body.content)
@@ -91,7 +93,11 @@ async def write_file(body: WriteBody):
 async def upload_files(
     path: str = Form(""), files: List[UploadFile] = File(...)
 ):
+    if len(files) > config.MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=400, detail="too many files")
     target_dir = utils.safe_join(config.DATA_DIR, path)
+    if not os.path.isdir(target_dir):
+        raise HTTPException(status_code=404, detail="directory not found")
     os.makedirs(target_dir, exist_ok=True)
     uploaded = []
     for f in files:
@@ -99,8 +105,16 @@ async def upload_files(
         if not filename:
             continue
         dest = utils.safe_join(target_dir, filename)
+        written = 0
         async with aiofiles.open(dest, "wb") as out:
             while chunk := await f.read(1024 * 1024):
+                written += len(chunk)
+                if written > config.MAX_UPLOAD_FILE_SIZE:
+                    try:
+                        os.remove(dest)
+                    except FileNotFoundError:
+                        pass
+                    raise HTTPException(status_code=400, detail=f"file too large: {filename}")
                 await out.write(chunk)
         uploaded.append(filename)
     return {"ok": True, "uploaded": uploaded}
@@ -121,6 +135,8 @@ def download_file(path: str):
 @router.post("/mkdir")
 def make_dir(body: PathBody):
     target = utils.safe_join(config.DATA_DIR, body.path)
+    if target == os.path.realpath(config.DATA_DIR):
+        raise HTTPException(status_code=400, detail="cannot create data root")
     if os.path.exists(target):
         raise HTTPException(status_code=400, detail="path already exists")
     os.makedirs(target, exist_ok=True)
@@ -131,8 +147,12 @@ def make_dir(body: PathBody):
 def rename(body: RenameBody):
     src = utils.safe_join(config.DATA_DIR, body.src)
     dst = utils.safe_join(config.DATA_DIR, body.dst)
+    if src == os.path.realpath(config.DATA_DIR) or dst == os.path.realpath(config.DATA_DIR):
+        raise HTTPException(status_code=400, detail="cannot rename data root")
     if not os.path.exists(src):
         raise HTTPException(status_code=404, detail="source not found")
+    if os.path.exists(dst):
+        raise HTTPException(status_code=400, detail="destination already exists")
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     os.replace(src, dst)
     return {"ok": True}

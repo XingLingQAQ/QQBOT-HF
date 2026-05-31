@@ -39,7 +39,7 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/lagrange.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-environment=DATA_DIR="${DATA_DIR}"
+environment=DATA_DIR="${DATA_DIR}",LAGRANGE_SIGN_SERVER_URL="https://sign.lagrangecore.org/api/sign/39038"
 
 [program:nonebot]
 command=${VENV_DIR}/bin/python bot.py

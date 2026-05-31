@@ -10,6 +10,7 @@ export default function Plugins() {
   const [toast, setToast] = useState("");
   const [configFor, setConfigFor] = useState(null);
   const [configText, setConfigText] = useState("{}");
+  const [systemConfig, setSystemConfig] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -22,6 +23,9 @@ export default function Plugins() {
 
   useEffect(() => {
     load();
+    api.get("/system/config")
+      .then(({ data }) => setSystemConfig(data))
+      .catch(() => {});
   }, [load]);
 
   const flash = (text) => {
@@ -134,6 +138,8 @@ export default function Plugins() {
         </form>
         <p className="hint-line">
           仅允许形如 <code>nonebot-plugin-xxx</code> / <code>nonebot_plugin_xxx</code> 的包名。
+          NoneBot 使用 <code>{systemConfig?.nonebotAdapter || "nonebot-adapter-onebot"}</code>，
+          反向 WS：<code>{systemConfig?.nonebotWsUrl || "ws://127.0.0.1:8080/onebot/v11/ws"}</code>。
         </p>
       </Card>
 

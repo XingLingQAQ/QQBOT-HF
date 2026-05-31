@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shlex
 from typing import Any, Dict, List
 
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 from . import config
 
 _PLUGIN_NAME_RE = re.compile(r"^nonebot[-_]plugin[-_][A-Za-z0-9_-]+$")
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def safe_join(base: str, *paths: str) -> str:
@@ -31,6 +33,17 @@ def safe_join(base: str, *paths: str) -> str:
 def valid_plugin_name(name: str) -> bool:
     """Validate a plugin package name against the NoneBot plugin convention."""
     return bool(name) and bool(_PLUGIN_NAME_RE.match(name))
+
+
+def valid_env_key(key: str) -> bool:
+    return bool(key) and bool(_ENV_KEY_RE.match(key))
+
+
+def dotenv_value(value: Any) -> str:
+    text = "" if value is None else str(value)
+    if text == "" or any(ch.isspace() for ch in text) or any(ch in text for ch in "\"'#$\\"):
+        return shlex.quote(text)
+    return text
 
 
 def read_plugins() -> Dict[str, Any]:
@@ -64,11 +77,13 @@ def human_size(num_bytes: int) -> str:
 
 def update_env_file(path: str, key: str, value: str) -> None:
     """Set ``KEY=value`` in a dotenv file, updating in place or appending."""
+    if not valid_env_key(key):
+        raise HTTPException(status_code=400, detail=f"invalid env key: {key}")
     lines: List[str] = []
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as fh:
             lines = fh.read().splitlines()
-    new_line = f"{key}={value}"
+    new_line = f"{key}={dotenv_value(value)}"
     found = False
     for i, line in enumerate(lines):
         stripped = line.strip()
