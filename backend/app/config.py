@@ -43,6 +43,10 @@ LAGRANGE_BIN = os.environ.get("LAGRANGE_BIN", "/opt/lagrange/Lagrange.OneBot")
 NAPCAT_QRCODE_PATH = os.path.join(NAPCAT_DIR, "cache", "qrcode.png")
 NAPCAT_CONFIG_DIR = os.path.join(NAPCAT_DIR, "config")
 NAPCAT_ONEBOT_JSON = os.path.join(NAPCAT_CONFIG_DIR, "onebot11.json")
+# Quick-login config (persisted): when enabled with a QQ uin, napcat-run.sh
+# launches QQ with ``-q <uin>`` so a previously scanned session auto-logs in
+# without showing the QR again.
+NAPCAT_QUICKLOGIN_JSON = os.path.join(NAPCAT_CONFIG_DIR, "quick_login.json")
 
 # --- Admin credentials (env-injected, defaults per spec) ---
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
@@ -82,6 +86,29 @@ PROTOCOL_NAPCAT = "napcat"
 VALID_PROTOCOLS = (PROTOCOL_LAGRANGE, PROTOCOL_NAPCAT)
 DEFAULT_PROTOCOL = PROTOCOL_LAGRANGE
 PROTOCOL_JSON = os.path.join(MANAGER_DIR, "protocol.json")
+
+# --- Log files (read-only viewer) ---
+# Whitelist of viewable logs => absolute path under MANAGER_DIR. Names are fixed
+# internal constants; the logs API only ever opens paths from this mapping, so
+# arbitrary file reads are impossible.
+LOG_FILES = {
+    "backend": os.path.join(MANAGER_DIR, "backend.log"),
+    "lagrange": os.path.join(MANAGER_DIR, "lagrange.log"),
+    "signserver": os.path.join(MANAGER_DIR, "signserver.log"),
+    "napcat": os.path.join(MANAGER_DIR, "napcat.log"),
+    "nonebot": os.path.join(MANAGER_DIR, "nonebot.log"),
+    "supervisord": os.path.join(MANAGER_DIR, "supervisord.log"),
+}
+LOG_LABELS = {
+    "backend": "后端服务",
+    "lagrange": "Lagrange.OneBot",
+    "signserver": "签名服务",
+    "napcat": "NapCatQQ",
+    "nonebot": "NoneBot",
+    "supervisord": "进程管理(Supervisor)",
+}
+# Max bytes returned by a single log read (tail). Keeps responses bounded.
+LOG_MAX_BYTES = 256 * 1024
 
 # Maximum size for text file read/write via the file manager (2 MB).
 MAX_TEXT_FILE_SIZE = 2 * 1024 * 1024
@@ -149,3 +176,35 @@ def write_protocol(protocol: str) -> None:
     os.makedirs(MANAGER_DIR, exist_ok=True)
     with open(PROTOCOL_JSON, "w", encoding="utf-8") as fh:
         json.dump({"protocol": protocol}, fh)
+
+
+def read_napcat_quicklogin() -> dict:
+    """Return the persisted NapCat quick-login config: {"enabled": bool, "qq": str}."""
+    enabled, qq = False, ""
+    try:
+        with open(NAPCAT_QUICKLOGIN_JSON, "r", encoding="utf-8") as fh:
+            data = json.load(fh) or {}
+        enabled = bool(data.get("enabled", False))
+        qq = str(data.get("qq", "") or "").strip()
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {"enabled": False, "qq": ""}
+    if not qq.isdigit():
+        qq, enabled = "", False
+    return {"enabled": enabled, "qq": qq}
+
+
+def write_napcat_quicklogin(enabled: bool, qq: str) -> dict:
+    """Persist NapCat quick-login config. ``qq`` must be digits when enabled."""
+    qq = str(qq or "").strip()
+    if enabled and not qq.isdigit():
+        raise ValueError("qq must be a numeric QQ uin when quick login is enabled")
+    if not qq.isdigit():
+        qq = ""
+        enabled = False
+    os.makedirs(NAPCAT_CONFIG_DIR, exist_ok=True)
+    payload = {"enabled": enabled, "qq": qq}
+    tmp = NAPCAT_QUICKLOGIN_JSON + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    os.replace(tmp, NAPCAT_QUICKLOGIN_JSON)
+    return payload

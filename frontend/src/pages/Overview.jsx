@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
 import ProtocolSelector from "../components/ProtocolSelector.jsx";
+import NapcatQuickLogin from "../components/NapcatQuickLogin.jsx";
 import api from "../api";
 import { loginState, procState, qqAvatar } from "../format";
 
@@ -166,6 +167,8 @@ export default function Overview() {
         </Card>
 
         <ProtocolSelector onChanged={tick} />
+
+        <NapcatQuickLogin />
       </div>
 
       <Card title="保活提示" className="hint-card">

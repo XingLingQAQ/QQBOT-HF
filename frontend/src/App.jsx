@@ -7,6 +7,8 @@ import QRLogin from "./pages/QRLogin.jsx";
 import Plugins from "./pages/Plugins.jsx";
 import Files from "./pages/Files.jsx";
 import Terminal from "./pages/Terminal.jsx";
+import Processes from "./pages/Processes.jsx";
+import Logs from "./pages/Logs.jsx";
 
 function Layout({ children }) {
   return (
@@ -30,6 +32,8 @@ export default function App() {
                 <Route path="/" element={<Overview />} />
                 <Route path="/qrlogin" element={<QRLogin />} />
                 <Route path="/plugins" element={<Plugins />} />
+                <Route path="/processes" element={<Processes />} />
+                <Route path="/logs" element={<Logs />} />
                 <Route path="/files" element={<Files />} />
                 <Route path="/terminal" element={<Terminal />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

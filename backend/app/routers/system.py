@@ -22,6 +22,22 @@ class UpdateLagrangeBody(BaseModel):
     url: Optional[str] = None
 
 
+class ProcessActionBody(BaseModel):
+    program: str
+    action: str
+
+
+# Programs the panel exposes for manual start/stop/restart. The backend process
+# itself is intentionally excluded: stopping it would kill the API serving this
+# panel and lock the user out (supervisord auto-restarts it anyway).
+_CONTROLLABLE_PROGRAMS = (
+    config.PROG_LAGRANGE,
+    config.PROG_SIGNSERVER,
+    config.PROG_NAPCAT,
+    config.PROG_NONEBOT,
+)
+
+
 # Sign URLs considered "stale defaults" that the repair flow may overwrite with
 # the self-hosted SignServer. The official central server is offline, so its
 # URLs are migrated to the local one too; custom user URLs are left untouched.
@@ -175,6 +191,52 @@ def status():
         "signserver": process_manager.get_status(config.PROG_SIGNSERVER),
         "napcat": process_manager.get_status(config.PROG_NAPCAT),
         "protocol": config.read_protocol(),
+    }
+
+
+@router.get("/processes")
+def list_processes():
+    """List controllable programs with their current supervisor state.
+
+    The set is protocol-aware only on the frontend; here we always report every
+    controllable program so the user can start/stop any of them manually.
+    """
+    labels = {
+        config.PROG_LAGRANGE: "Lagrange.OneBot",
+        config.PROG_SIGNSERVER: "签名服务",
+        config.PROG_NAPCAT: "NapCatQQ",
+        config.PROG_NONEBOT: "NoneBot",
+    }
+    items = [
+        {
+            "program": prog,
+            "label": labels.get(prog, prog),
+            "status": process_manager.get_status(prog),
+        }
+        for prog in _CONTROLLABLE_PROGRAMS
+    ]
+    return {"protocol": config.read_protocol(), "processes": items}
+
+
+@router.post("/processes/action")
+def process_action(body: ProcessActionBody):
+    """Run a start/stop/restart action against one controllable program."""
+    program = (body.program or "").strip()
+    action = (body.action or "").strip()
+    if action not in {"start", "stop", "restart"}:
+        raise HTTPException(status_code=400, detail="invalid action")
+    if program not in _CONTROLLABLE_PROGRAMS:
+        raise HTTPException(status_code=400, detail="invalid program")
+    try:
+        rc, output = process_manager.supervisor_ctl(action, program)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "ok": rc == 0,
+        "program": program,
+        "action": action,
+        "status": process_manager.get_status(program),
+        "log": output,
     }
 
 
