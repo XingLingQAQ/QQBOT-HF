@@ -22,6 +22,19 @@ sleep 2
 export DISPLAY=:1
 export FFMPEG_PATH="${FFMPEG_PATH:-/usr/bin/ffmpeg}"
 
+# Quick login: when config/quick_login.json has {"enabled":true,"qq":"<uin>"},
+# launch QQ with `-q <uin>` so a previously scanned session auto-logs in without
+# showing the QR again. The QQ uin is validated to be digits before use.
+QUICK_CFG="$NAPCAT_WORKDIR/config/quick_login.json"
+QUICK_QQ=""
+if [ -f "$QUICK_CFG" ] && grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$QUICK_CFG"; then
+  QUICK_QQ=$(sed -n 's/.*"qq"[[:space:]]*:[[:space:]]*"\{0,1\}\([0-9]\{1,\}\).*/\1/p' "$QUICK_CFG" | head -n1)
+fi
+
 # QQ stores its login session under $HOME/.config/QQ; HOME points into the
 # persistent workdir so a scanned login survives container rebuilds.
+if [ -n "$QUICK_QQ" ]; then
+  echo "[napcat] quick login enabled for QQ $QUICK_QQ"
+  exec /opt/QQ/qq --no-sandbox -q "$QUICK_QQ"
+fi
 exec /opt/QQ/qq --no-sandbox
