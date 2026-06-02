@@ -69,7 +69,7 @@ redirect_stderr=true
 stdout_logfile=${DATA_DIR}/manager/napcat.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
-environment=NAPCAT_WORKDIR="${DATA_DIR}/napcat",NAPCAT_WRAPPER_PATH="/opt/QQ-napcat/resources/app/wrapper.node",HOME="${DATA_DIR}/napcat/home",DISPLAY=":1",FFMPEG_PATH="/usr/bin/ffmpeg"
+environment=NAPCAT_WORKDIR="${DATA_DIR}/napcat",NAPCAT_WRAPPER_PATH="/opt/QQ/resources/app/wrapper.node",HOME="${DATA_DIR}/napcat/home",DISPLAY=":1",FFMPEG_PATH="/usr/bin/ffmpeg"
 
 [program:nonebot]
 command=${PYTHON_BIN} bot.py

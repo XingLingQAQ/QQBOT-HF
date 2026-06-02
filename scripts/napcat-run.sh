@@ -4,7 +4,7 @@
 #
 # NapCat injects into the official Linux QQ (an Electron app), so it needs a
 # virtual X display. We start Xvfb on :1, then exec the patched QQ binary which
-# loads NapCat via /opt/QQ-napcat/resources/app/loadNapCat.js. NapCat reads its config
+# loads NapCat via /opt/QQ/resources/app/loadNapCat.js. NapCat reads its config
 # (onebot11.json) and writes logs/cache/qrcode.png under $NAPCAT_WORKDIR.
 set -euo pipefail
 
@@ -35,6 +35,6 @@ fi
 # persistent workdir so a scanned login survives container rebuilds.
 if [ -n "$QUICK_QQ" ]; then
   echo "[napcat] quick login enabled for QQ $QUICK_QQ"
-  exec /opt/QQ-napcat/qq --no-sandbox -q "$QUICK_QQ"
+  exec /opt/QQ/qq --no-sandbox -q "$QUICK_QQ"
 fi
-exec /opt/QQ-napcat/qq --no-sandbox
+exec /opt/QQ/qq --no-sandbox
