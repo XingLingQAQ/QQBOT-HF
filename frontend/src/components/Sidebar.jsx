@@ -6,6 +6,7 @@ import StatusLights from "./StatusLights.jsx";
 const NAV = [
   { to: "/", label: "总览", icon: "▣", end: true },
   { to: "/qrlogin", label: "扫码登录", icon: "▦" },
+  { to: "/napcat-webui", label: "NapCat WebUI", icon: "◆" },
   { to: "/plugins", label: "插件管理", icon: "◧" },
   { to: "/processes", label: "进程控制", icon: "⚙" },
   { to: "/logs", label: "日志", icon: "≡" },

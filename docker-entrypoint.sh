@@ -45,6 +45,26 @@ mkdir -p "$DATA_DIR/lagrange" \
 [ -f "$DATA_DIR/napcat/config/onebot11.json" ] || cp "$TEMPLATES/onebot11.json.template" "$DATA_DIR/napcat/config/onebot11.json"
 [ -f "$DATA_DIR/plugins.json" ]              || echo '{"plugins":[]}' > "$DATA_DIR/plugins.json"
 
+# NapCat WebUI config (first run only). Listen on loopback so it is never
+# exposed directly; the backend reverse-proxies it at /napcat/* on $PORT. A
+# random token is generated once and persisted so the panel can pre-fill login.
+WEBUI_JSON="$DATA_DIR/napcat/config/webui.json"
+if [ ! -f "$WEBUI_JSON" ]; then
+  "$PYTHON_BIN" - "$WEBUI_JSON" "${NAPCAT_WEBUI_PORT:-6099}" <<'PY'
+import json, secrets, sys
+path, port = sys.argv[1], int(sys.argv[2])
+cfg = {
+    "host": "127.0.0.1",
+    "port": port,
+    "token": secrets.token_hex(16),
+    "loginRate": 10,
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(cfg, fh, ensure_ascii=False, indent=2)
+PY
+  echo "[entrypoint] generated NapCat WebUI config at $WEBUI_JSON"
+fi
+
 # Keep first-run and old persisted Lagrange configs aligned with the current
 # in-container NoneBot reverse-WS wiring, without overwriting custom sign URLs
 # unless they are empty or known legacy defaults. The default points at the
