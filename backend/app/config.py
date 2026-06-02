@@ -35,6 +35,11 @@ PYTHON_BIN = os.environ.get("PYTHON_BIN", "/usr/local/bin/python")
 QRCODE_PATH = os.path.join(LAGRANGE_DIR, "qr-0.png")
 KEYSTORE_PATH = os.path.join(LAGRANGE_DIR, "keystore.json")
 ENV_FILE = os.path.join(NONEBOT_DIR, ".env")
+# Authoritative login state, written by NoneBot's bot connect/disconnect hooks
+# (see bot.py.template). Both Lagrange and NapCat connect to NoneBot as OneBot
+# v11 only after the QQ account is logged in, so a connected bot is the single
+# source of truth for "online" + the real uin/nickname for either backend.
+BOT_LOGIN_JSON = os.path.join(MANAGER_DIR, "bot_login.json")
 APPSETTINGS_PATH = os.path.join(LAGRANGE_DIR, "appsettings.json")
 LAGRANGE_BIN = os.environ.get("LAGRANGE_BIN", "/opt/lagrange/Lagrange.OneBot")
 
@@ -238,3 +243,22 @@ def read_napcat_webui() -> dict:
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         pass
     return {"token": token, "port": port, "host": host}
+
+
+def read_bot_login() -> dict:
+    """Return the connected OneBot account: {"online": bool, "uin": str, "nickname": str}.
+
+    Written by NoneBot's bot connect/disconnect lifecycle hooks. Missing/invalid
+    file => treated as not connected. This reflects the actually-connected bot,
+    independent of which backend (Lagrange/NapCat) is selected.
+    """
+    try:
+        with open(BOT_LOGIN_JSON, "r", encoding="utf-8") as fh:
+            data = json.load(fh) or {}
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return {"online": False, "uin": "", "nickname": ""}
+    return {
+        "online": bool(data.get("online")),
+        "uin": str(data.get("uin", "") or ""),
+        "nickname": str(data.get("nickname", "") or ""),
+    }

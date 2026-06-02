@@ -8,11 +8,59 @@ import json
 import os
 
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter, Bot as OneBotV11Bot
 
 nonebot.init()
 driver = nonebot.get_driver()
 driver.register_adapter(OneBotV11Adapter)
+
+# --- Login state for the panel --------------------------------------------
+# Both Lagrange and NapCat connect here (OneBot v11 reverse WS) only AFTER the
+# QQ account is logged in, so a connected bot is the authoritative "online"
+# signal and the source of the real uin/nickname. We persist it to a small JSON
+# the backend reads (config.read_bot_login), instead of guessing from QR files.
+_DATA_DIR = os.environ.get("DATA_DIR", "/data")
+_BOT_LOGIN_JSON = os.path.join(_DATA_DIR, "manager", "bot_login.json")
+
+
+def _write_bot_login(online, uin="", nickname=""):
+    payload = {"online": bool(online), "uin": str(uin or ""), "nickname": str(nickname or "")}
+    try:
+        os.makedirs(os.path.dirname(_BOT_LOGIN_JSON), exist_ok=True)
+        tmp = _BOT_LOGIN_JSON + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+        os.replace(tmp, _BOT_LOGIN_JSON)
+    except OSError:
+        pass
+
+
+# Reset on startup: no bot is connected until on_bot_connect fires.
+_write_bot_login(False)
+
+
+@driver.on_bot_connect
+async def _on_bot_connect(bot: OneBotV11Bot):
+    uin, nickname = bot.self_id, ""
+    try:
+        info = await bot.get_login_info()
+        uin = info.get("user_id", uin)
+        nickname = info.get("nickname", "")
+    except Exception:  # noqa: BLE001 - still mark online with at least the uin
+        pass
+    _write_bot_login(True, uin, nickname)
+
+
+@driver.on_bot_disconnect
+async def _on_bot_disconnect(bot: OneBotV11Bot):
+    # Keep last-known uin/nickname for display, but mark offline.
+    prev = {}
+    try:
+        with open(_BOT_LOGIN_JSON, "r", encoding="utf-8") as fh:
+            prev = json.load(fh) or {}
+    except (OSError, ValueError):
+        pass
+    _write_bot_login(False, prev.get("uin", bot.self_id), prev.get("nickname", ""))
 
 # Load enabled plugins from the manager's manifest.
 data_dir = os.environ.get("DATA_DIR", "/data")
