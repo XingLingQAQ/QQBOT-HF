@@ -156,6 +156,21 @@ PY
   done
 fi
 
+# 3c. Strip the duplicated NoneBot core from the plugin overlay dir.
+# `pip install --target $PYTHON_PACKAGES_DIR` also drops a full copy of nonebot2
+# (a hard dependency of every plugin) into the overlay. Since that dir is
+# prepended to PYTHONPATH, the duplicate `nonebot/` package shadows the image's
+# system install — the one carrying the OneBot v11 adapter — so NoneBot crashes
+# on boot with "No module named 'nonebot.adapters.onebot'". The image already
+# ships a complete nonebot core + onebot adapter, so remove the overlay copy;
+# real plugin packages (nonebot_plugin_*) stay and import nonebot from the
+# system. Runs every boot, so it also self-heals deployments already broken.
+if [ -d "$PYTHON_PACKAGES_DIR" ]; then
+  rm -rf "$PYTHON_PACKAGES_DIR/nonebot" \
+         "$PYTHON_PACKAGES_DIR"/nonebot2-*.dist-info \
+         "$PYTHON_PACKAGES_DIR"/nonebot2-*.data 2>/dev/null || true
+fi
+
 # 4. Render supervisord config (only the whitelisted vars are substituted).
 envsubst '${DATA_DIR} ${PYTHON_BIN} ${PORT} ${AUTOSTART_LAGRANGE} ${AUTOSTART_SIGNSERVER} ${AUTOSTART_NAPCAT}' \
   < "$TEMPLATES/supervisord.conf.template" \
