@@ -95,8 +95,11 @@ async def napcat_http_proxy(path: str, request: Request, _: str = Depends(auth.r
             media_type="text/plain; charset=utf-8",
         )
     except httpx.HTTPError as exc:
+        # ReadTimeout/RemoteProtocolError etc. happen while NapCat's QQ core is
+        # starting up or crash-looping; surface a clean message rather than a
+        # raw 5xx from the dying upstream.
         return Response(
-            content=f"NapCat WebUI 代理错误: {exc}",
+            content=f"NapCat WebUI 暂不可用（{type(exc).__name__}）。请稍候，或前往「进程控制」确认 napcat 已正常运行。",
             status_code=502,
             media_type="text/plain; charset=utf-8",
         )

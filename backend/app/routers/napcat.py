@@ -5,6 +5,7 @@ without showing the QR again. We persist {"enabled", "qq"} under the NapCat
 workdir; ``napcat-run.sh`` reads it at launch and passes ``-q <uin>`` to QQ.
 """
 
+import socket
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,21 @@ from pydantic import BaseModel
 from .. import auth, config, process_manager
 
 router = APIRouter(tags=["napcat"], dependencies=[Depends(auth.require_auth)])
+
+
+def _webui_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    """True if the WebUI HTTP server is actually accepting connections.
+
+    supervisord reports napcat RUNNING the moment QQ/Xvfb spawn, but the WebUI
+    server on 127.0.0.1:<port> needs a few more seconds (and is gone while QQ is
+    crash-looping). Probing the socket avoids embedding the iframe before the
+    server can serve it.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 class QuickLoginBody(BaseModel):
@@ -38,7 +54,16 @@ def get_webui_info():
     protocol = config.read_protocol()
     webui = config.read_napcat_webui()
     running = process_manager.get_status(config.PROG_NAPCAT) == "RUNNING"
-    available = protocol == config.PROTOCOL_NAPCAT and running
+    # Only mark available when NapCat is the active backend AND its WebUI server
+    # is actually listening (not merely supervisord-RUNNING). This keeps the
+    # panel from embedding the iframe during NapCat startup or a QQ crash loop,
+    # where the WebUI would 502 or return its own "Internal Server Error".
+    available = (
+        protocol == config.PROTOCOL_NAPCAT
+        and running
+        and _webui_port_open(webui.get("host") or config.NAPCAT_WEBUI_HOST,
+                             webui.get("port") or config.NAPCAT_WEBUI_PORT)
+    )
     token = webui.get("token") or ""
     base = f"{config.NAPCAT_WEBUI_PROXY_PREFIX}/webui/"
     url = f"{base}?token={token}" if token else base
