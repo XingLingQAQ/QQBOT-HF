@@ -9,6 +9,7 @@ import Files from "./pages/Files.jsx";
 import Terminal from "./pages/Terminal.jsx";
 import Processes from "./pages/Processes.jsx";
 import Logs from "./pages/Logs.jsx";
+import NapcatWebUI from "./pages/NapcatWebUI.jsx";
 
 function Layout({ children }) {
   return (
@@ -31,6 +32,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Overview />} />
                 <Route path="/qrlogin" element={<QRLogin />} />
+                <Route path="/napcat-webui" element={<NapcatWebUI />} />
                 <Route path="/plugins" element={<Plugins />} />
                 <Route path="/processes" element={<Processes />} />
                 <Route path="/logs" element={<Logs />} />

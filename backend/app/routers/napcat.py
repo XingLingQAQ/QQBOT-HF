@@ -26,6 +26,31 @@ def get_quick_login():
     return {**cfg, "protocol": config.read_protocol()}
 
 
+@router.get("/napcat/webui-info")
+def get_webui_info():
+    """Report how to reach NapCat's WebUI through the single-port reverse proxy.
+
+    ``url`` points at the proxied WebUI with the login token pre-filled so the
+    panel can embed it directly. ``available`` is true only when NapCat is the
+    active backend and its process is running (otherwise the WebUI server on
+    127.0.0.1:6099 is down and the proxy would 502).
+    """
+    protocol = config.read_protocol()
+    webui = config.read_napcat_webui()
+    running = process_manager.get_status(config.PROG_NAPCAT) == "RUNNING"
+    available = protocol == config.PROTOCOL_NAPCAT and running
+    token = webui.get("token") or ""
+    base = f"{config.NAPCAT_WEBUI_PROXY_PREFIX}/webui/"
+    url = f"{base}?token={token}" if token else base
+    return {
+        "protocol": protocol,
+        "running": running,
+        "available": available,
+        "token": token,
+        "url": url,
+    }
+
+
 @router.post("/napcat/quick-login")
 def set_quick_login(body: QuickLoginBody):
     try:

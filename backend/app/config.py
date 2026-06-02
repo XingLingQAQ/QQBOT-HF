@@ -47,6 +47,11 @@ NAPCAT_ONEBOT_JSON = os.path.join(NAPCAT_CONFIG_DIR, "onebot11.json")
 # launches QQ with ``-q <uin>`` so a previously scanned session auto-logs in
 # without showing the QR again.
 NAPCAT_QUICKLOGIN_JSON = os.path.join(NAPCAT_CONFIG_DIR, "quick_login.json")
+# NapCat's built-in WebUI config. NapCat reads it from $NAPCAT_WORKDIR/config.
+# The WebUI HTTP server listens on 127.0.0.1:<port> inside the container and is
+# never exposed directly; the backend reverse-proxies it at /napcat/* on the
+# single public port so it works on a Hugging Face Space.
+NAPCAT_WEBUI_JSON = os.path.join(NAPCAT_CONFIG_DIR, "webui.json")
 
 # --- Admin credentials (env-injected, defaults per spec) ---
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
@@ -59,6 +64,11 @@ NONEBOT_WS_PORT = 8080
 # (NoneBot) and 7860 (backend) to avoid clashes. Lagrange points its
 # SignServerUrl at http://127.0.0.1:<SIGNSERVER_PORT>.
 SIGNSERVER_PORT = int(os.environ.get("SIGNSERVER_PORT", "8087"))
+# NapCat WebUI listen port (loopback only). Reverse-proxied at /napcat/*.
+NAPCAT_WEBUI_HOST = "127.0.0.1"
+NAPCAT_WEBUI_PORT = _int_env("NAPCAT_WEBUI_PORT", 6099, minimum=1, maximum=65535)
+# External path under which the WebUI is reverse-proxied (single public port).
+NAPCAT_WEBUI_PROXY_PREFIX = "/napcat"
 
 # --- Static frontend build output ---
 STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
@@ -208,3 +218,23 @@ def write_napcat_quicklogin(enabled: bool, qq: str) -> dict:
         json.dump(payload, fh, ensure_ascii=False)
     os.replace(tmp, NAPCAT_QUICKLOGIN_JSON)
     return payload
+
+
+def read_napcat_webui() -> dict:
+    """Return NapCat WebUI config: {"token": str, "port": int, "host": str}.
+
+    Reads the same ``webui.json`` NapCat consumes so the panel can surface the
+    login token and proxy target. Falls back to defaults when missing/invalid.
+    """
+    token, port, host = "", NAPCAT_WEBUI_PORT, NAPCAT_WEBUI_HOST
+    try:
+        with open(NAPCAT_WEBUI_JSON, "r", encoding="utf-8") as fh:
+            data = json.load(fh) or {}
+        token = str(data.get("token", "") or "")
+        if isinstance(data.get("port"), int) and 1 <= data["port"] <= 65535:
+            port = data["port"]
+        if isinstance(data.get("host"), str) and data["host"]:
+            host = data["host"]
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        pass
+    return {"token": token, "port": port, "host": host}

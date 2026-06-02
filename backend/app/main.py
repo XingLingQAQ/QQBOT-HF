@@ -16,6 +16,7 @@ from .routers import auth as auth_router
 from .routers import files as files_router
 from .routers import logs as logs_router
 from .routers import napcat as napcat_router
+from .routers import napcat_webui as napcat_webui_router
 from .routers import plugins as plugins_router
 from .routers import protocol as protocol_router
 from .routers import qrcode as qrcode_router
@@ -34,6 +35,7 @@ app.include_router(napcat_router.router, prefix="/api")
 app.include_router(logs_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(terminal_router.router)  # /ws/terminal
+app.include_router(napcat_webui_router.router)  # /napcat/* reverse proxy (HTTP + WS)
 
 
 @app.get("/api/health")
@@ -54,7 +56,12 @@ def spa_fallback(full_path: str):
     API (``/api/*``) and WebSocket (``/ws/*``) routes are matched before this
     handler by FastAPI's router, so they are never shadowed here.
     """
-    if full_path.startswith("api/") or full_path.startswith("ws/"):
+    if (
+        full_path.startswith("api/")
+        or full_path.startswith("ws/")
+        or full_path == "napcat"
+        or full_path.startswith("napcat/")
+    ):
         return JSONResponse({"detail": "not found"}, status_code=404)
 
     # Serve a real static file if it exists (e.g. favicon, vite.svg).

@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir \
       supervisor \
       "fastapi>=0.110" "uvicorn[standard]>=0.29" "python-multipart>=0.0.9" \
-      "itsdangerous>=2.1" "aiofiles>=23.2" "websockets>=12.0" \
+      "itsdangerous>=2.1" "aiofiles>=23.2" "httpx>=0.27" "websockets>=12.0" \
       "nonebot2>=2.5.0" "nonebot-adapter-onebot>=2.4.6"
 
 # Download Lagrange.OneBot (linux-x64, self-contained net9.0 nightly).
@@ -99,6 +99,25 @@ RUN mkdir -p /opt/napcat && \
     rm -f /tmp/napcat.zip && \
     echo "(async () => {await import('file:///opt/napcat/napcat.mjs');})();" > /opt/QQ/resources/app/loadNapCat.js && \
     sed -i 's|"main": "[^"]*"|"main": "./loadNapCat.js"|' /opt/QQ/resources/app/package.json
+
+# Re-base the NapCat WebUI static bundle so it can be reverse-proxied under
+# /napcat/* on the single public port. NapCat dropped `prefix` support in v4.4+,
+# so its frontend hardcodes absolute paths: assets/router under `/webui/` and its
+# backend under `/api/` (incl. the WS endpoints `/api/Debug/ws`, `/api/ws/terminal`,
+# built via template literals, not just quoted strings). We rewrite `/webui/`->
+# `/napcat/webui/`, `/api/`->`/napcat/api/` and the bare base `/api"`->`/napcat/api"`
+# in the served HTML/JS/CSS; the backend proxy strips `/napcat` before forwarding to
+# 6099. The `/api/` form is precise: external refs like `api.github.com`/`api.iowen.cn`
+# use `/api.` (a dot, not a slash) and are left untouched.
+RUN set -e; \
+    WEBUI_STATIC=/opt/napcat/static; \
+    if [ -d "$WEBUI_STATIC" ]; then \
+      find "$WEBUI_STATIC" -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) -print0 \
+        | xargs -0 sed -i -e 's#/webui/#/napcat/webui/#g' -e 's#/api/#/napcat/api/#g' -e 's#/api"#/napcat/api"#g'; \
+      echo "[build] patched NapCat WebUI base paths under $WEBUI_STATIC"; \
+    else \
+      echo "[build] WARN: $WEBUI_STATIC not found; WebUI base paths not patched"; \
+    fi
 
 COPY scripts/napcat-run.sh /opt/napcat/napcat-run.sh
 RUN chmod +x /opt/napcat/napcat-run.sh
