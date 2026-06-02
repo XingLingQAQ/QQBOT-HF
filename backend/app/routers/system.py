@@ -46,6 +46,7 @@ _OLD_SIGN_URLS = {
     "https://sign.lagrangecore.org/api/sign",
     "https://sign.lagrangecore.org/api/sign/30366",
     "https://sign.lagrangecore.org/api/sign/39038",
+    "https://sign.lagrangecore.org/api/sign/44343",
 }
 
 

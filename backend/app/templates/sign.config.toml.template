@@ -1,8 +1,18 @@
 # VincentZyu233/SignServer runtime config.
-# offset/version are reverse-engineered for the exact Linux QQ build whose
-# wrapper.node is shipped alongside the `sign` binary. Do NOT change `version`
-# or `offset` unless you also swap wrapper.node for the matching QQ build.
+# offset/version are tied to the exact Linux QQ build whose wrapper.node ships
+# alongside the `sign` binary. We run a single QQ build, 3.2.23-44343 (the version
+# NapCat 4.18.4 requires), and the SignServer is configured for it too:
+#   * version  -> selects the appinfo served at /appinfo. The build ships only
+#     3.2.19-39038 embedded, so we drop a matching 3.2.23-44343.json next to the
+#     binary (service.rs reads {version}.json from CWD before the embedded asset).
+#   * offset   -> runtime address of the sign function inside wrapper.node. The
+#     value below (0x535B04E) was located in 3.2.23-44343's wrapper.node by
+#     matching the exact sign-function signature of the known 3.2.19-39038 build
+#     (offset 0x5ADE220): identical instruction/arg-marshalling sequence, the
+#     frame just grew 0x188 -> 0x198.
+# Do NOT change `version`/`offset` unless you also swap wrapper.node + appinfo for
+# the matching QQ build.
 preloads = ["libgnutls.so.30", "./libsymbols.so"]
 listen = "127.0.0.1:8087"
-offset = 0x5ADE220
-version = "3.2.19-39038"
+offset = 0x535B04E
+version = "3.2.23-44343"
