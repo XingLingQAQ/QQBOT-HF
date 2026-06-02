@@ -58,58 +58,66 @@ def _read_uin() -> str:
     return ""
 
 
+def _qr_state(qr_path: str) -> str:
+    """waiting_scan/expired based on the pending-QR file's age (caller checks existence)."""
+    try:
+        age = time.time() - os.path.getmtime(qr_path)
+    except OSError:
+        age = 0
+    return "expired" if age > config.QR_EXPIRY_SECONDS else "waiting_scan"
+
+
 def _lagrange_login_status():
-    """Login state for the Lagrange backend (keystore/QR files + process state)."""
+    """Login state for the Lagrange backend.
+
+    The connected OneBot bot (config.read_bot_login) is authoritative for
+    "online" + uin/nickname; QR files only drive the pre-login states.
+    """
+    bot = config.read_bot_login()
     lagrange_state = process_manager.get_status(config.PROG_LAGRANGE)
-    nonebot_state = process_manager.get_status(config.PROG_NONEBOT)
     keystore_exists = os.path.isfile(config.KEYSTORE_PATH)
     qr_exists = os.path.isfile(config.QRCODE_PATH)
 
-    qq = _read_uin() if keystore_exists else ""
+    # Prefer the live bot's uin; fall back to the keystore's last-known uin.
+    qq = bot["uin"] or (_read_uin() if keystore_exists else "")
 
-    status = "offline"
-    if keystore_exists and lagrange_state == "RUNNING" and nonebot_state == "RUNNING":
+    if bot["online"] and lagrange_state == "RUNNING":
         status = "online"
     elif qr_exists:
-        try:
-            age = time.time() - os.path.getmtime(config.QRCODE_PATH)
-        except OSError:
-            age = 0
-        status = "expired" if age > config.QR_EXPIRY_SECONDS else "waiting_scan"
+        status = _qr_state(config.QRCODE_PATH)
     elif lagrange_state != "RUNNING":
         status = "offline"
     elif keystore_exists:
         status = "scanned"
+    else:
+        status = "offline"
 
-    return {"status": status, "qq": qq, "nickname": ""}
+    return {"status": status, "qq": qq, "nickname": bot["nickname"]}
 
 
 def _napcat_login_status():
     """Login state for the NapCat backend.
 
-    NapCat stores its session inside the embedded QQ client (not a keystore we
-    can parse), and removes ``cache/qrcode.png`` once a scan succeeds. So we
-    infer: QR present & fresh => waiting_scan; napcat + nonebot RUNNING with no
-    pending QR => online; otherwise offline. qq/nickname are returned empty
-    (filled by NoneBot's get_login_info cache when available).
+    NapCat keeps its session inside the embedded QQ client (no keystore we can
+    parse) and removes ``cache/qrcode.png`` once a scan succeeds. Previously we
+    guessed "online" purely from process state, which wrongly reported online
+    whenever napcat+nonebot were RUNNING even before/without a real login. Now
+    the authoritative signal is the connected OneBot bot (config.read_bot_login),
+    which only connects after a successful QQ login and carries the real
+    uin/nickname; QR file age only drives the pre-login states.
     """
+    bot = config.read_bot_login()
     napcat_state = process_manager.get_status(config.PROG_NAPCAT)
-    nonebot_state = process_manager.get_status(config.PROG_NONEBOT)
     qr_exists = os.path.isfile(config.NAPCAT_QRCODE_PATH)
 
-    status = "offline"
-    if qr_exists:
-        try:
-            age = time.time() - os.path.getmtime(config.NAPCAT_QRCODE_PATH)
-        except OSError:
-            age = 0
-        status = "expired" if age > config.QR_EXPIRY_SECONDS else "waiting_scan"
-    elif napcat_state == "RUNNING" and nonebot_state == "RUNNING":
+    if bot["online"] and napcat_state == "RUNNING":
         status = "online"
-    elif napcat_state != "RUNNING":
+    elif qr_exists:
+        status = _qr_state(config.NAPCAT_QRCODE_PATH)
+    else:
         status = "offline"
 
-    return {"status": status, "qq": "", "nickname": ""}
+    return {"status": status, "qq": bot["uin"], "nickname": bot["nickname"]}
 
 
 @router.get("/login-status")
@@ -127,6 +135,12 @@ def login_status():
 def logout_qq():
     """Remove credentials & pending QR, then restart the active backend."""
     removed = []
+    # Drop the cached login state so the panel shows offline immediately (the
+    # bot-disconnect hook will also rewrite it when the backend restarts).
+    try:
+        os.remove(config.BOT_LOGIN_JSON)
+    except FileNotFoundError:
+        pass
     if config.read_protocol() == config.PROTOCOL_NAPCAT:
         # NapCat keeps its session inside the embedded QQ profile; clear the
         # pending QR and restart so it shows a fresh login QR.
