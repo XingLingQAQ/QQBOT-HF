@@ -19,6 +19,11 @@ export default defineConfig({
         target: "ws://localhost:7860",
         ws: true,
       },
+      "/napcat": {
+        target: "http://localhost:7860",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

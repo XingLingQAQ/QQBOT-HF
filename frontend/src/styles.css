@@ -1060,3 +1060,21 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* NapCat WebUI embedded frame */
+.webui-frame-wrap {
+  width: 100%;
+  height: 72vh;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.webui-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
