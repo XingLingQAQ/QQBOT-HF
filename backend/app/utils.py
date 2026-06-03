@@ -37,14 +37,14 @@ def prune_overlay_nonebot_core() -> bool:
 
     ``pip install --target $PYTHON_PACKAGES_DIR`` (used for every plugin so it
     persists on ``/data``) also drops a full copy of ``nonebot2`` — a hard
-    dependency of every plugin — into the overlay. Because that dir is prepended
-    to ``PYTHONPATH``, the overlay ``nonebot/`` shadows the image's *system*
-    nonebot, which is the one carrying the OneBot v11 adapter, so NoneBot crashes
-    on boot with ``No module named 'nonebot.adapters.onebot'``. The image always
-    ships a complete nonebot core + onebot adapter, so the overlay copy is safe
-    to remove; genuine plugin packages (``nonebot_plugin_*``) stay and import
-    nonebot from the system. Mirrors the entrypoint's boot-time cleanup so the
-    runtime install path (panel → /api/plugins/install) is fixed too.
+    dependency of every plugin — into the overlay. The image now adds the overlay
+    to ``sys.path`` at *lowest* priority via a ``.pth`` file, so the system
+    nonebot (the one carrying the OneBot v11 adapter) already wins; this cleanup
+    is belt-and-suspenders that also keeps ``/data`` lean and self-heals older
+    deployments. The image always ships a complete nonebot core + onebot adapter,
+    so the overlay copy is safe to remove; genuine plugin packages
+    (``nonebot_plugin_*``) stay. Runs on every NoneBot restart, covering the
+    runtime install path (panel → /api/plugins/install).
 
     Returns True if anything was removed.
     """
