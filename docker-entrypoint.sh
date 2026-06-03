@@ -19,9 +19,17 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; th
   PORT=7860
 fi
 
+# Create the overlay dir before any Python process starts: the image ships a
+# `.pth` file that appends this dir to sys.path (see Dockerfile), but `site`
+# only honors it if the dir exists at interpreter startup.
 mkdir -p "$PYTHON_PACKAGES_DIR"
 export DATA_DIR PYTHON_BIN PYTHON_PACKAGES_DIR PORT ADMIN_USER ADMIN_PASS STATIC_DIR
-export PYTHONPATH="$PYTHON_PACKAGES_DIR${PYTHONPATH:+:$PYTHONPATH}"
+# NOTE: we deliberately do NOT prepend $PYTHON_PACKAGES_DIR to PYTHONPATH.
+# PYTHONPATH would outrank the system site-packages and let a plugin's
+# duplicated nonebot/pydantic/playwright core shadow the image's own (crashing
+# NoneBot with "No module named 'nonebot.adapters.onebot'"/"ASGIMixin"). Instead
+# the overlay is added at LOWEST priority via the .pth, so the system packages
+# always win and only genuine plugin packages load from /data.
 
 echo "[entrypoint] preparing $DATA_DIR ..."
 
@@ -156,15 +164,10 @@ PY
   done
 fi
 
-# 3c. Strip the duplicated NoneBot core from the plugin overlay dir.
-# `pip install --target $PYTHON_PACKAGES_DIR` also drops a full copy of nonebot2
-# (a hard dependency of every plugin) into the overlay. Since that dir is
-# prepended to PYTHONPATH, the duplicate `nonebot/` package shadows the image's
-# system install — the one carrying the OneBot v11 adapter — so NoneBot crashes
-# on boot with "No module named 'nonebot.adapters.onebot'". The image already
-# ships a complete nonebot core + onebot adapter, so remove the overlay copy;
-# real plugin packages (nonebot_plugin_*) stay and import nonebot from the
-# system. Runs every boot, so it also self-heals deployments already broken.
+# 3c. Belt-and-suspenders: also delete the duplicated NoneBot core that
+# `pip install --target $PYTHON_PACKAGES_DIR` drops into the overlay. The .pth
+# above already makes the system nonebot win regardless, but removing the dead
+# overlay copy keeps /data lean and self-heals deployments that predate the .pth.
 if [ -d "$PYTHON_PACKAGES_DIR" ]; then
   rm -rf "$PYTHON_PACKAGES_DIR/nonebot" \
          "$PYTHON_PACKAGES_DIR"/nonebot2-*.dist-info \

@@ -34,7 +34,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PORT=7860 \
     DATA_DIR=/data \
     STATIC_DIR=/app/static \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 
 # Runtime deps:
 #  - libicu-dev: required by the .NET self-contained Lagrange.OneBot binary
@@ -59,7 +60,34 @@ RUN pip install --no-cache-dir \
       supervisor \
       "fastapi>=0.110" "uvicorn[standard]>=0.29" "python-multipart>=0.0.9" \
       "itsdangerous>=2.1" "aiofiles>=23.2" "httpx>=0.27" "websockets>=12.0" \
-      "nonebot2>=2.5.0" "nonebot-adapter-onebot>=2.4.6"
+      "nonebot2>=2.5.0" "nonebot-adapter-onebot>=2.4.6" \
+      "playwright==1.60.0"
+
+# Pre-install Playwright's Chromium (+ headless shell) and its OS deps into the
+# image so browser-rendering plugins (e.g. nonebot-plugin-htmlrender, which
+# nonebot-plugin-picstatus_ng depends on) work out of the box. Without this the
+# plugin's startup hook fails ("Executable doesn't exist ... chrome-headless-shell")
+# and takes the whole NoneBot process down. Browsers go to PLAYWRIGHT_BROWSERS_PATH
+# (/opt/ms-playwright), a stable shared path; world-readable so appuser can launch.
+# The system Playwright (pinned here) always wins over any overlay copy a plugin
+# pulls into /data (see the overlay .pth below), so this baked Chromium build
+# always matches the Playwright that actually runs.
+RUN python -m playwright install --with-deps chromium && \
+    chmod -R a+rX /opt/ms-playwright
+
+# Make the persisted plugin dir (/data/python-packages) the LOWEST-priority entry
+# on sys.path via a .pth file. .pth dirs are appended AFTER the system
+# site-packages, so the image's own nonebot/pydantic/playwright/etc. always win,
+# and only packages that exist solely in the overlay (the actual plugins) load
+# from /data. This is the root fix for the recurring crashes where a plugin's
+# `pip install --target` dropped a duplicate (often older/incomplete) nonebot
+# core into the overlay and shadowed the system one carrying the OneBot adapter
+# (ModuleNotFoundError: nonebot.adapters.onebot / ImportError: ASGIMixin).
+# NOTE: site only adds the dir if it exists at interpreter start; the entrypoint
+# creates /data/python-packages before launching any process.
+RUN SP="$(python -c 'import site; print(site.getsitepackages()[0])')" && \
+    printf '%s\n' '/data/python-packages' > "$SP/zzz_qqbot_overlay.pth" && \
+    echo "[build] overlay path file -> $SP/zzz_qqbot_overlay.pth"
 
 # Download Lagrange.OneBot (linux-x64, self-contained net9.0 nightly).
 ARG LAGRANGE_URL="https://github.com/LagrangeDev/Lagrange.Core/releases/download/nightly/Lagrange.OneBot_linux-x64_net9.0_SelfContained.tar.gz"
