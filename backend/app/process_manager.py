@@ -72,6 +72,13 @@ def restart_lagrange() -> Tuple[int, str]:
 
 
 def restart_nonebot() -> Tuple[int, str]:
+    # Strip any duplicated NoneBot core that a `pip install --target` (plugin
+    # install) left in the overlay dir before (re)starting, otherwise it would
+    # shadow the system nonebot+adapter and crash NoneBot. Covers every caller
+    # (install/uninstall/toggle/config/restart), not just container boot.
+    from . import utils
+
+    utils.prune_overlay_nonebot_core()
     return supervisor_ctl("restart", config.PROG_NONEBOT)
 
 

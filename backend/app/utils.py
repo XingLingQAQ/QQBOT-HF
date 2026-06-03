@@ -1,9 +1,11 @@
 """Shared helpers: safe path joins, plugin manifest IO, dotenv editing."""
 
+import glob
 import json
 import os
 import re
 import shlex
+import shutil
 from typing import Any, Dict, List
 
 from fastapi import HTTPException
@@ -28,6 +30,38 @@ def safe_join(base: str, *paths: str) -> str:
     if candidate != base_real and not candidate.startswith(base_real + os.sep):
         raise HTTPException(status_code=400, detail="invalid path")
     return candidate
+
+
+def prune_overlay_nonebot_core() -> bool:
+    """Delete the duplicated NoneBot core from the plugin overlay dir.
+
+    ``pip install --target $PYTHON_PACKAGES_DIR`` (used for every plugin so it
+    persists on ``/data``) also drops a full copy of ``nonebot2`` — a hard
+    dependency of every plugin — into the overlay. Because that dir is prepended
+    to ``PYTHONPATH``, the overlay ``nonebot/`` shadows the image's *system*
+    nonebot, which is the one carrying the OneBot v11 adapter, so NoneBot crashes
+    on boot with ``No module named 'nonebot.adapters.onebot'``. The image always
+    ships a complete nonebot core + onebot adapter, so the overlay copy is safe
+    to remove; genuine plugin packages (``nonebot_plugin_*``) stay and import
+    nonebot from the system. Mirrors the entrypoint's boot-time cleanup so the
+    runtime install path (panel → /api/plugins/install) is fixed too.
+
+    Returns True if anything was removed.
+    """
+    overlay = config.PYTHON_PACKAGES_DIR
+    if not overlay or not os.path.isdir(overlay):
+        return False
+    removed = False
+    core = os.path.join(overlay, "nonebot")
+    if os.path.isdir(core):
+        shutil.rmtree(core, ignore_errors=True)
+        removed = True
+    for meta in glob.glob(os.path.join(overlay, "nonebot2-*.dist-info")) + glob.glob(
+        os.path.join(overlay, "nonebot2-*.data")
+    ):
+        shutil.rmtree(meta, ignore_errors=True)
+        removed = True
+    return removed
 
 
 def valid_plugin_name(name: str) -> bool:
