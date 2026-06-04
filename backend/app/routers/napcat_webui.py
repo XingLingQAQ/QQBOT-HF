@@ -16,6 +16,7 @@ and the WebUI itself listens on loopback only, so it is never directly exposed.
 """
 
 import asyncio
+import json
 
 import httpx
 import websockets
@@ -34,6 +35,18 @@ _DROP_REQUEST_HEADERS = {"host", "connection", "keep-alive", "proxy-authorizatio
 _DROP_RESPONSE_HEADERS = {"connection", "keep-alive", "proxy-authenticate",
                           "proxy-authorization", "te", "trailer", "transfer-encoding",
                           "upgrade", "content-encoding", "content-length"}
+
+# NapCat WebUI's "check for updates" endpoint fetches the latest release tag
+# straight from api.github.com with no mirror fallback. On a restricted network
+# (e.g. Hugging Face Spaces, where outbound to GitHub is dropped) that request
+# hangs and NapCat itself returns HTTP 500 (``{"error":"Failed to fetch latest
+# tag"}``). The proxy used to pass that 500 through verbatim, surfacing a scary
+# "Failed to load resource: 500" in the browser console. It is a non-critical
+# version check, so we degrade it to an empty success payload: the WebUI's
+# update widget then treats it as "no newer version" and shows nothing, instead
+# of erroring. Matched as a path suffix (the proxied path is e.g.
+# ``api/base/getLatestTag``); case-insensitive.
+_SOFT_5XX_ENDPOINTS = ("base/getlatesttag",)
 
 _client: httpx.AsyncClient | None = None
 
@@ -98,10 +111,33 @@ async def napcat_http_proxy(path: str, request: Request, _: str = Depends(auth.r
         # ReadTimeout/RemoteProtocolError etc. happen while NapCat's QQ core is
         # starting up or crash-looping; surface a clean message rather than a
         # raw 5xx from the dying upstream.
+        if any(path.lower().endswith(suffix) for suffix in _SOFT_5XX_ENDPOINTS):
+            # Non-critical update check (see below); degrade quietly.
+            return Response(
+                content=json.dumps(
+                    {"code": 0, "data": "", "message": "GitHub 暂不可达，已跳过更新检查"}
+                ),
+                status_code=200,
+                media_type="application/json; charset=utf-8",
+            )
         return Response(
             content=f"NapCat WebUI 暂不可用（{type(exc).__name__}）。请稍候，或前往「进程控制」确认 napcat 已正常运行。",
             status_code=502,
             media_type="text/plain; charset=utf-8",
+        )
+
+    if upstream.status_code >= 500 and any(
+        path.lower().endswith(suffix) for suffix in _SOFT_5XX_ENDPOINTS
+    ):
+        # Non-critical GitHub-backed update check failed upstream (likely no
+        # outbound network). Degrade to an empty success so the browser never
+        # logs a 500; the WebUI reads this as "no newer version".
+        return Response(
+            content=json.dumps(
+                {"code": 0, "data": "", "message": "GitHub 暂不可达，已跳过更新检查"}
+            ),
+            status_code=200,
+            media_type="application/json; charset=utf-8",
         )
 
     resp_headers = {
