@@ -1,7 +1,13 @@
+# qqbot-managed-file: bot.py rev=2
 """NoneBot2 entrypoint (copied to /data/nonebot/bot.py on first run).
 
 Initializes NoneBot with the OneBot V11 adapter (reverse WebSocket server) and
 loads every enabled plugin listed in /data/plugins.json.
+
+The leading ``# qqbot-managed-file: bot.py rev=N`` marker lets the entrypoint
+auto-upgrade a stale /data/nonebot/bot.py (e.g. one predating the login hooks
+below) on the next boot, backing up the old copy first. Bump ``rev`` whenever
+this template changes in a way deployments must pick up.
 """
 
 import json

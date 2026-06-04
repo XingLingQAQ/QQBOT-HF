@@ -31,6 +31,40 @@ export DATA_DIR PYTHON_BIN PYTHON_PACKAGES_DIR PORT ADMIN_USER ADMIN_PASS STATIC
 # the overlay is added at LOWEST priority via the .pth, so the system packages
 # always win and only genuine plugin packages load from /data.
 
+# Persist pip installs to /data. The image ships read-only layers that do NOT
+# survive a rebuild/redeploy, and on Hugging Face only /data persists. We point
+# pip at the overlay dir (the same one the .pth adds to sys.path) via a config
+# file written at RUNTIME (so the Docker *build*'s own pip installs into the
+# image are untouched). `target` makes every `pip install` land in /data;
+# `upgrade=true` avoids pip's "target directory already exists" error when a
+# package is reinstalled, so a plain `pip install <pkg>` from the web terminal
+# just works and persists. The .pth still keeps system core packages winning, so
+# this cannot reintroduce the nonebot/pydantic shadowing crashes.
+PIP_CONFIG_FILE="$DATA_DIR/manager/pip.conf"
+mkdir -p "$DATA_DIR/manager"
+_write_pip_conf() {
+  # $1 = destination path. Keep `target`/`upgrade` under [install] (NOT
+  # [global]/PIP_TARGET) so they apply only to `pip install` — putting them
+  # globally would make `pip uninstall`, `pip show` and `pip list` choke on an
+  # unsupported --target option.
+  cat > "$1" <<PIPCONF
+[global]
+no-cache-dir = true
+
+[install]
+target = $PYTHON_PACKAGES_DIR
+upgrade = true
+PIPCONF
+}
+_write_pip_conf "$PIP_CONFIG_FILE"
+export PIP_CONFIG_FILE
+# Also drop it at pip's per-user default location so an interactive shell that
+# does NOT inherit PIP_CONFIG_FILE (e.g. a plain `docker exec` login) still
+# installs to the persistent overlay.
+if [ -n "${HOME:-}" ]; then
+  mkdir -p "$HOME/.config/pip" 2>/dev/null && _write_pip_conf "$HOME/.config/pip/pip.conf" 2>/dev/null || true
+fi
+
 echo "[entrypoint] preparing $DATA_DIR ..."
 
 # 1. Directory layout
@@ -47,7 +81,30 @@ mkdir -p "$DATA_DIR/lagrange" \
 # be executed (compatible with noexec persistent volumes).
 
 # 3. First-run config files (never overwrite user edits / persisted state)
-[ -f "$DATA_DIR/nonebot/bot.py" ]            || cp "$TEMPLATES/bot.py.template"          "$DATA_DIR/nonebot/bot.py"
+
+# bot.py is a MANAGED file: it carries the OneBot connect/disconnect hooks that
+# write the panel's login state (/data/manager/bot_login.json). A deployment
+# that first booted before those hooks existed keeps a stale bot.py forever
+# under a persistent /data, so NapCat/Lagrange would connect but the panel would
+# never see "online"/uin/nickname. We embed a `# qqbot-managed-file: bot.py
+# rev=N` marker in the template and auto-upgrade an older/markerless managed
+# copy on boot, backing up the previous file first.
+_bot_py="$DATA_DIR/nonebot/bot.py"
+_bot_tmpl="$TEMPLATES/bot.py.template"
+_rev_of() { sed -n 's/^# qqbot-managed-file: bot.py rev=\([0-9][0-9]*\).*/\1/p' "$1" 2>/dev/null | head -n1; }
+if [ ! -f "$_bot_py" ]; then
+  cp "$_bot_tmpl" "$_bot_py"
+  echo "[entrypoint] created managed bot.py (rev $(_rev_of "$_bot_tmpl"))"
+else
+  _tmpl_rev="$(_rev_of "$_bot_tmpl")"; _tmpl_rev="${_tmpl_rev:-0}"
+  _cur_rev="$(_rev_of "$_bot_py")"; _cur_rev="${_cur_rev:-0}"
+  if [ "$_cur_rev" -lt "$_tmpl_rev" ]; then
+    cp "$_bot_py" "$_bot_py.bak.$(date +%s)" 2>/dev/null || true
+    cp "$_bot_tmpl" "$_bot_py"
+    echo "[entrypoint] upgraded managed bot.py (rev $_cur_rev -> $_tmpl_rev; old copy backed up)"
+  fi
+fi
+
 [ -f "$DATA_DIR/nonebot/.env" ]              || cp "$TEMPLATES/env.template"             "$DATA_DIR/nonebot/.env"
 [ -f "$DATA_DIR/lagrange/appsettings.json" ] || cp "$TEMPLATES/appsettings.json.template" "$DATA_DIR/lagrange/appsettings.json"
 [ -f "$DATA_DIR/napcat/config/onebot11.json" ] || cp "$TEMPLATES/onebot11.json.template" "$DATA_DIR/napcat/config/onebot11.json"

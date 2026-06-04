@@ -58,7 +58,14 @@ async def terminal_ws(websocket: WebSocket):
     if pid == 0:
         # --- child process ---
         env = os.environ.copy()
-        env["PYTHONPATH"] = f"{config.PYTHON_PACKAGES_DIR}:{env.get('PYTHONPATH', '')}"
+        # Do NOT prepend the overlay to PYTHONPATH: that would outrank the system
+        # site-packages and let a plugin's duplicated nonebot/pydantic core shadow
+        # the image's own (the very crash the .pth fix addresses). The image's
+        # overlay .pth already puts /data/python-packages on sys.path at LOWEST
+        # priority for every Python invocation, so terminal `python` matches the
+        # NoneBot service. pip persistence is handled via PIP_CONFIG_FILE
+        # (inherited here), so `pip install` from the terminal lands in /data too.
+        env.pop("PYTHONPATH", None)
         env["TERM"] = "xterm-256color"
         env["HOME"] = os.environ.get("HOME", config.DATA_DIR)
         try:
