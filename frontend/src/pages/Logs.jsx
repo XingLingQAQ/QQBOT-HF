@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import api from "../api";
 
+// Keep at most this many characters in the live buffer so a long-running
+// stream can't grow unbounded; oldest lines are dropped from the front.
+const MAX_CHARS = 1_000_000;
+
 function formatSize(bytes) {
   if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -17,10 +21,13 @@ function formatSize(bytes) {
 export default function Logs() {
   const [logs, setLogs] = useState([]);
   const [active, setActive] = useState("");
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [auto, setAuto] = useState(true);
+  const [meta, setMeta] = useState(null);
+  const [content, setContent] = useState("");
+  const [live, setLive] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [nonce, setNonce] = useState(0); // bump to force a reconnect
   const preRef = useRef(null);
+  const esRef = useRef(null);
 
   const loadList = useCallback(async () => {
     try {
@@ -32,43 +39,76 @@ export default function Logs() {
     }
   }, []);
 
-  const loadDetail = useCallback(async (name) => {
-    if (!name) return;
-    setLoading(true);
-    try {
-      const { data } = await api.get(`/logs/${name}`);
-      setDetail(data);
-    } catch (e) {
-      setDetail({ name, content: `加载失败：${e?.response?.data?.detail || e.message}`, exists: false });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadList();
   }, [loadList]);
 
+  // Open one SSE stream per (active log, live, nonce). The server sends a `meta`
+  // frame + current tail, then only appended bytes (tail -f). We append
+  // incrementally instead of re-pulling the whole tail on a timer.
   useEffect(() => {
-    loadDetail(active);
-  }, [active, loadDetail]);
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+    if (!active || !live) {
+      setConnected(false);
+      return undefined;
+    }
+    setContent("");
+    const es = new EventSource(`/api/logs/${encodeURIComponent(active)}/stream`);
+    esRef.current = es;
 
-  useEffect(() => {
-    if (!auto) return undefined;
-    const id = setInterval(() => loadDetail(active), 3000);
-    return () => clearInterval(id);
-  }, [auto, active, loadDetail]);
+    const append = (chunk) =>
+      setContent((prev) => {
+        const next = prev + chunk;
+        return next.length > MAX_CHARS ? next.slice(next.length - MAX_CHARS) : next;
+      });
 
-  // Keep the view pinned to the newest log line after each refresh.
+    es.addEventListener("meta", (e) => {
+      try {
+        setMeta(JSON.parse(e.data));
+      } catch {
+        /* ignore */
+      }
+      setContent("");
+    });
+    es.addEventListener("reset", (e) => {
+      setContent("");
+      try {
+        const m = JSON.parse(e.data);
+        setMeta((prev) => ({ ...(prev || {}), exists: m.exists }));
+      } catch {
+        /* ignore */
+      }
+    });
+    es.onmessage = (e) => {
+      setConnected(true);
+      try {
+        append(JSON.parse(e.data));
+      } catch {
+        /* ignore */
+      }
+    };
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false); // EventSource auto-reconnects; meta resets the buffer
+
+    return () => {
+      es.close();
+      if (esRef.current === es) esRef.current = null;
+    };
+  }, [active, live, nonce]);
+
+  // Keep the view pinned to the newest log line as content streams in.
   useEffect(() => {
     if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
-  }, [detail]);
+  }, [content]);
 
   return (
     <div className="page">
       <h2 className="page-title">日志</h2>
       <p className="hint-line muted">
-        查看各后端进程的运行日志（仅显示文件尾部，最多约 256&nbsp;KB）。如需完整日志请点击「下载」。
+        实时流式跟随各后端进程日志（先显示尾部约 256&nbsp;KB，随后只增量推送新内容）。如需完整日志请点击「下载」。
       </p>
 
       <div className="log-tabs">
@@ -85,15 +125,18 @@ export default function Logs() {
       </div>
 
       <Card
-        title={detail?.label || "日志"}
+        title={meta?.label || "日志"}
         extra={
           <div className="log-toolbar">
+            <span className={`badge ${live && connected ? "green" : "gray"}`}>
+              {live ? (connected ? "实时" : "连接中…") : "已暂停"}
+            </span>
             <label className="checkbox-row inline">
-              <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-              <span>自动刷新</span>
+              <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />
+              <span>实时跟随</span>
             </label>
-            <button className="btn" onClick={() => loadDetail(active)} disabled={loading}>
-              {loading ? "刷新中…" : "刷新"}
+            <button className="btn" onClick={() => setNonce((n) => n + 1)} disabled={!live}>
+              重连
             </button>
             <a className="btn" href={`/api/logs/${active}/download`}>
               下载
@@ -102,17 +145,17 @@ export default function Logs() {
         }
       >
         <div className="log-meta">
-          {detail?.exists ? (
+          {meta?.exists ? (
             <>
-              <span>大小：{formatSize(detail.size)}</span>
-              {detail.truncated && <span className="badge yellow">已截断（仅尾部）</span>}
+              <span>起始大小：{formatSize(meta.size)}</span>
+              {meta.truncated && <span className="badge yellow">已截断（仅尾部）</span>}
             </>
           ) : (
             <span className="hint-line muted">该日志文件尚不存在（对应进程可能未运行过）。</span>
           )}
         </div>
         <pre className="log-view" ref={preRef}>
-          {detail?.content || (detail?.exists ? "（日志为空）" : "")}
+          {content || (meta?.exists ? "（日志为空）" : "")}
         </pre>
       </Card>
     </div>
