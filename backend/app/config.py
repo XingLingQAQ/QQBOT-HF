@@ -103,17 +103,15 @@ DEFAULT_PROTOCOL = PROTOCOL_LAGRANGE
 PROTOCOL_JSON = os.path.join(MANAGER_DIR, "protocol.json")
 
 # --- Log files (read-only viewer) ---
-# Whitelist of viewable logs => absolute path under MANAGER_DIR. Names are fixed
-# internal constants; the logs API only ever opens paths from this mapping, so
-# arbitrary file reads are impossible.
-LOG_FILES = {
-    "backend": os.path.join(MANAGER_DIR, "backend.log"),
-    "lagrange": os.path.join(MANAGER_DIR, "lagrange.log"),
-    "signserver": os.path.join(MANAGER_DIR, "signserver.log"),
-    "napcat": os.path.join(MANAGER_DIR, "napcat.log"),
-    "nonebot": os.path.join(MANAGER_DIR, "nonebot.log"),
-    "supervisord": os.path.join(MANAGER_DIR, "supervisord.log"),
-}
+# Minecraft-server-style storage: each program writes to
+# ``<MANAGER_DIR>/logs/<program>/latest.log`` and previous runs are gzip-archived
+# next to it (see ``logstore`` + ``docker-entrypoint.sh``). ``LOG_FILES`` maps the
+# fixed whitelist of viewable program names to their *current* (latest) log, so
+# the logs API only ever opens paths derived from this mapping — arbitrary file
+# reads remain impossible.
+LOG_DIR = os.path.join(MANAGER_DIR, "logs")
+_LOG_PROGRAMS = ("backend", "lagrange", "signserver", "napcat", "nonebot", "supervisord")
+LOG_FILES = {name: os.path.join(LOG_DIR, name, "latest.log") for name in _LOG_PROGRAMS}
 LOG_LABELS = {
     "backend": "后端服务",
     "lagrange": "Lagrange.OneBot",

@@ -7,13 +7,14 @@ so a large log never blows up the response.
 """
 
 import asyncio
+import gzip
 import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from .. import auth, config
+from .. import auth, config, logstore
 
 router = APIRouter(tags=["logs"], dependencies=[Depends(auth.require_auth)])
 
@@ -59,6 +60,7 @@ def list_logs():
                 "label": config.LOG_LABELS.get(name, name),
                 "exists": exists,
                 "size": os.path.getsize(path) if exists else 0,
+                "archives": len(logstore.list_archives(name)),
             }
         )
     return {"logs": items}
@@ -87,6 +89,69 @@ def read_log(name: str, max_bytes: int = Query(default=config.LOG_MAX_BYTES, ge=
         "truncated": truncated,
         "content": content,
     }
+
+
+def _tail_gz(path: str, max_bytes: int) -> tuple[str, int, bool]:
+    """Decompress a gzip archive and return (tail_text, uncompressed_size, truncated)."""
+    with gzip.open(path, "rb") as fh:
+        raw = fh.read()
+    total = len(raw)
+    truncated = total > max_bytes
+    if truncated:
+        raw = raw[total - max_bytes :]
+    text = raw.decode("utf-8", errors="replace")
+    if truncated:
+        nl = text.find("\n")
+        if nl != -1:
+            text = text[nl + 1 :]
+    return text, total, truncated
+
+
+@router.get("/logs/{name}/archives")
+def list_log_archives(name: str):
+    """List the gzip-archived previous runs for a program (newest first)."""
+    _resolve(name)  # validates name against the whitelist
+    return {
+        "name": name,
+        "label": config.LOG_LABELS.get(name, name),
+        "archives": logstore.list_archives(name),
+    }
+
+
+@router.get("/logs/{name}/archive/{fname}")
+def read_log_archive(name: str, fname: str, max_bytes: int = Query(default=config.LOG_MAX_BYTES, ge=1024)):
+    """Return the (bounded) tail of one gzip-archived run as decompressed text."""
+    _resolve(name)
+    path = logstore.archive_path(name, fname)
+    if path is None:
+        raise HTTPException(status_code=404, detail="archive not found")
+    cap = min(max_bytes, config.LOG_MAX_BYTES)
+    content, size, truncated = _tail_gz(path, cap)
+    return {
+        "name": name,
+        "label": config.LOG_LABELS.get(name, name),
+        "file": fname,
+        "exists": True,
+        "size": size,
+        "truncated": truncated,
+        "content": content,
+    }
+
+
+@router.get("/logs/{name}/archive/{fname}/download")
+def download_log_archive(name: str, fname: str):
+    """Download one archived run, decompressed, as a text attachment."""
+    _resolve(name)
+    path = logstore.archive_path(name, fname)
+    if path is None:
+        raise HTTPException(status_code=404, detail="archive not found")
+    with gzip.open(path, "rb") as fh:
+        raw = fh.read()
+    stem = fname[:-3] if fname.endswith(".gz") else fname  # drop trailing .gz
+    return PlainTextResponse(
+        raw.decode("utf-8", errors="replace"),
+        headers={"Content-Disposition": f'attachment; filename="{name}-{stem}"'},
+    )
 
 
 def _sse_event(event: str | None, data) -> str:

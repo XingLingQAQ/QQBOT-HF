@@ -1,6 +1,6 @@
 [supervisord]
 nodaemon=true
-logfile=${DATA_DIR}/manager/supervisord.log
+logfile=${DATA_DIR}/manager/logs/supervisord/latest.log
 pidfile=${DATA_DIR}/manager/supervisord.pid
 childlogdir=${DATA_DIR}/manager
 
@@ -22,7 +22,7 @@ startsecs=3
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=${DATA_DIR}/manager/backend.log
+stdout_logfile=${DATA_DIR}/manager/logs/backend/latest.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 
@@ -39,7 +39,7 @@ startsecs=3
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=${DATA_DIR}/manager/signserver.log
+stdout_logfile=${DATA_DIR}/manager/logs/signserver/latest.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 environment=LD_LIBRARY_PATH="/opt/QQ/resources/app:/opt/QQ"
@@ -53,7 +53,7 @@ startsecs=3
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=${DATA_DIR}/manager/lagrange.log
+stdout_logfile=${DATA_DIR}/manager/logs/lagrange/latest.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 
@@ -66,7 +66,7 @@ startsecs=5
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=${DATA_DIR}/manager/napcat.log
+stdout_logfile=${DATA_DIR}/manager/logs/napcat/latest.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 environment=NAPCAT_WORKDIR="${DATA_DIR}/napcat",NAPCAT_WRAPPER_PATH="/opt/QQ/resources/app/wrapper.node",HOME="${DATA_DIR}/napcat/home",DISPLAY=":1",FFMPEG_PATH="/usr/bin/ffmpeg"
@@ -80,7 +80,7 @@ startsecs=3
 stopasgroup=true
 killasgroup=true
 redirect_stderr=true
-stdout_logfile=${DATA_DIR}/manager/nonebot.log
+stdout_logfile=${DATA_DIR}/manager/logs/nonebot/latest.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=3
 # HOST/PORT are forced in the command so NoneBot binds its reverse-WS server on

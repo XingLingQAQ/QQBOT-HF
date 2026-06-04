@@ -45,11 +45,30 @@ def _supervisorctl(*args: str) -> Tuple[int, str]:
 
 
 def supervisor_ctl(action: str, program: str) -> Tuple[int, str]:
-    """Run a supervisor action against a program. ``action`` is whitelisted."""
+    """Run a supervisor action against a program. ``action`` is whitelisted.
+
+    Start/restart rotate the program's ``latest.log`` first (Minecraft-style:
+    every run gets a fresh file, the previous run is gzip-archived) — but only
+    while the program is stopped, so we never race supervisord's writer:
+      * start   -> rotate (skipped if already running) then start
+      * restart -> stop, rotate, start
+    """
     if action not in {"start", "stop", "restart", "status"}:
         raise ValueError(f"invalid action: {action}")
     if program not in _PROGRAMS:
         raise ValueError(f"invalid program: {program}")
+
+    from . import logstore
+
+    if action == "start":
+        if get_status(program) not in ("RUNNING", "STARTING"):
+            logstore.rotate(program)
+        return _supervisorctl("start", program)
+    if action == "restart":
+        stop_rc, stop_out = _supervisorctl("stop", program)
+        logstore.rotate(program)
+        start_rc, start_out = _supervisorctl("start", program)
+        return start_rc, f"{stop_out}\n{start_out}".strip()
     return _supervisorctl(action, program)
 
 
