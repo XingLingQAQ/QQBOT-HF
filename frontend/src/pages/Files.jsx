@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Card from "../components/Card.jsx";
 import Modal from "../components/Modal.jsx";
 import api from "../api";
+import { useConfirm, usePrompt, useToast } from "../ui.jsx";
 
 function joinPath(base, name) {
   if (!base) return name;
@@ -24,17 +25,15 @@ export default function Files() {
   const [path, setPath] = useState("");
   const [items, setItems] = useState([]);
   const [limits, setLimits] = useState({ maxUploadFileSize: 50 * 1024 * 1024, maxUploadFiles: 20 });
-  const [toast, setToast] = useState("");
   const [editing, setEditing] = useState(null); // {path, content}
   const [editContent, setEditContent] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
-
-  const flash = (t) => {
-    setToast(t);
-    setTimeout(() => setToast(""), 3500);
-  };
+  const toast = useToast();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
 
   const load = useCallback(async (p) => {
     setLoading(true);
@@ -43,11 +42,11 @@ export default function Files() {
       setPath(data.path || "");
       setItems(data.items || []);
     } catch (e) {
-      flash(e?.response?.data?.detail || "无法读取目录");
+      toast.error(e?.response?.data?.detail || "无法读取目录");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     load("");
@@ -67,17 +66,20 @@ export default function Files() {
       setEditing({ path: full });
       setEditContent(data.content);
     } catch (e) {
-      flash(e?.response?.data?.detail || "无法读取文件");
+      toast.error(e?.response?.data?.detail || "无法读取文件");
     }
   };
 
   const saveEditor = async () => {
+    setSaving(true);
     try {
       await api.put("/files/write", { path: editing.path, content: editContent });
-      flash("已保存");
+      toast.success("已保存");
       setEditing(null);
     } catch (e) {
-      flash(e?.response?.data?.detail || "保存失败");
+      toast.error(e?.response?.data?.detail || "保存失败");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -88,62 +90,86 @@ export default function Files() {
 
   const remove = async (item) => {
     const full = joinPath(path, item.name);
-    if (!window.confirm(`确定删除 ${item.name} 吗？`)) return;
+    const ok = await confirm({
+      title: "删除",
+      message: `确定删除 ${item.name} 吗？${item.type === "dir" ? "目录及其全部内容将被删除，" : ""}此操作不可撤销。`,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete("/files/delete", { data: { path: full } });
-      flash("已删除");
+      toast.success("已删除");
       load(path);
     } catch (e) {
-      flash(e?.response?.data?.detail || "删除失败");
+      toast.error(e?.response?.data?.detail || "删除失败");
     }
   };
 
   const rename = async (item) => {
     const full = joinPath(path, item.name);
-    const next = window.prompt("重命名为（同目录下新名称）：", item.name);
+    const next = await prompt({
+      title: "重命名",
+      message: "输入同目录下的新名称：",
+      defaultValue: item.name,
+      required: true,
+      requiredMessage: "名称不能为空",
+    });
     if (!next || next === item.name) return;
     try {
       await api.post("/files/rename", { src: full, dst: joinPath(path, next) });
-      flash("已重命名");
+      toast.success("已重命名");
       load(path);
     } catch (e) {
-      flash(e?.response?.data?.detail || "重命名失败");
+      toast.error(e?.response?.data?.detail || "重命名失败");
     }
   };
 
   const mkdir = async () => {
-    const name = window.prompt("新文件夹名称：");
+    const name = await prompt({
+      title: "新建文件夹",
+      message: "输入文件夹名称：",
+      placeholder: "例如 my-folder",
+      required: true,
+      requiredMessage: "名称不能为空",
+    });
     if (!name) return;
     try {
       await api.post("/files/mkdir", { path: joinPath(path, name) });
-      flash("已创建");
+      toast.success("已创建");
       load(path);
     } catch (e) {
-      flash(e?.response?.data?.detail || "创建失败");
+      toast.error(e?.response?.data?.detail || "创建失败");
     }
   };
 
   const newFile = async () => {
-    const name = window.prompt("新文件名称：");
+    const name = await prompt({
+      title: "新建文件",
+      message: "输入文件名称：",
+      placeholder: "例如 config.json",
+      required: true,
+      requiredMessage: "名称不能为空",
+    });
     if (!name) return;
     try {
       await api.put("/files/write", { path: joinPath(path, name), content: "" });
-      flash("已创建");
+      toast.success("已创建");
       load(path);
     } catch (e) {
-      flash(e?.response?.data?.detail || "创建失败");
+      toast.error(e?.response?.data?.detail || "创建失败");
     }
   };
 
   const uploadFiles = async (files) => {
     if (!files || files.length === 0) return;
     if (files.length > limits.maxUploadFiles) {
-      flash(`一次最多上传 ${limits.maxUploadFiles} 个文件`);
+      toast.error(`一次最多上传 ${limits.maxUploadFiles} 个文件`);
       return;
     }
     const tooLarge = files.find((f) => f.size > limits.maxUploadFileSize);
     if (tooLarge) {
-      flash(`${tooLarge.name} 超过 ${fmtSize(limits.maxUploadFileSize)} 限制`);
+      toast.error(`${tooLarge.name} 超过 ${fmtSize(limits.maxUploadFileSize)} 限制`);
       return;
     }
     const form = new FormData();
@@ -151,10 +177,10 @@ export default function Files() {
     files.forEach((f) => form.append("files", f));
     try {
       await api.post("/files/upload", form);
-      flash(`已上传 ${files.length} 个文件`);
+      toast.success(`已上传 ${files.length} 个文件`);
       load(path);
     } catch (err) {
-      flash(err?.response?.data?.detail || "上传失败");
+      toast.error(err?.response?.data?.detail || "上传失败");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -302,8 +328,8 @@ export default function Files() {
             <button className="btn" onClick={() => setEditing(null)}>
               取消
             </button>
-            <button className="btn primary" onClick={saveEditor}>
-              保存
+            <button className="btn primary" disabled={saving} onClick={saveEditor}>
+              {saving ? "保存中…" : "保存"}
             </button>
           </>
         }
@@ -315,8 +341,6 @@ export default function Files() {
           onChange={(e) => setEditContent(e.target.value)}
         />
       </Modal>
-
-      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }

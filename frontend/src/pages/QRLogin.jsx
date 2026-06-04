@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import Card from "../components/Card.jsx";
 import api from "../api";
 import { loginState } from "../format";
+import { useConfirm, useToast } from "../ui.jsx";
 
 const STATUS_HINT = {
   online: "已登录并连接成功。",
@@ -15,8 +16,9 @@ export default function QRLogin() {
   const [info, setInfo] = useState({ status: "offline", qq: "", nickname: "" });
   const [qrTs, setQrTs] = useState(Date.now());
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
   const [qrOk, setQrOk] = useState(false);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const poll = useCallback(async () => {
     try {
@@ -43,28 +45,32 @@ export default function QRLogin() {
 
   const refreshQr = async () => {
     setBusy(true);
-    setMsg("");
     try {
       await api.post("/restart-lagrange");
-      setMsg("已请求重启 Lagrange，正在生成新的二维码…");
+      toast.info("已请求重启 Lagrange，正在生成新的二维码…");
       setTimeout(() => setQrTs(Date.now()), 2000);
     } catch (e) {
-      setMsg(e?.response?.data?.detail || "刷新失败");
+      toast.error(e?.response?.data?.detail || "刷新失败");
     } finally {
       setBusy(false);
     }
   };
 
   const logoutQq = async () => {
-    if (!window.confirm("确定要退出当前 QQ 登录吗？将删除登录凭据并重启 Lagrange。")) return;
+    const ok = await confirm({
+      title: "退出登录",
+      message: "确定要退出当前 QQ 登录吗？将删除登录凭据并重启 Lagrange。",
+      confirmText: "退出登录",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
-    setMsg("");
     try {
       await api.post("/logout-qq");
-      setMsg("已退出登录，请重新扫码。");
+      toast.success("已退出登录，请重新扫码。");
       setTimeout(() => setQrTs(Date.now()), 2000);
     } catch (e) {
-      setMsg(e?.response?.data?.detail || "退出失败");
+      toast.error(e?.response?.data?.detail || "退出失败");
     } finally {
       setBusy(false);
     }
@@ -122,7 +128,6 @@ export default function QRLogin() {
             </div>
           </div>
         )}
-        {msg && <div className="hint-line info">{msg}</div>}
       </Card>
 
       <Card title="签名服务说明">

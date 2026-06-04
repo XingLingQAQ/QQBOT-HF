@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "../api";
 import Card from "./Card.jsx";
 import { PROTOCOLS } from "../format";
+import { useConfirm } from "../ui.jsx";
 
 // Lets the user pick the active QQ protocol backend. Selecting NapCat stops
 // Lagrange + the sign server (and vice-versa); the choice is persisted server
@@ -11,6 +12,7 @@ export default function ProtocolSelector({ onChanged }) {
   const [available, setAvailable] = useState(["lagrange", "napcat"]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -31,9 +33,12 @@ export default function ProtocolSelector({ onChanged }) {
   const select = async (next) => {
     if (busy || next === protocol) return;
     const label = (PROTOCOLS[next] && PROTOCOLS[next].label) || next;
-    if (!window.confirm(`切换协议后端到「${label}」？\n将停止未选用的协议及其依赖进程，可能需要重新扫码登录。`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: "切换协议后端",
+      message: `切换协议后端到「${label}」？\n将停止未选用的协议及其依赖进程，可能需要重新扫码登录。`,
+      confirmText: "切换",
+    });
+    if (!ok) return;
     setBusy(true);
     setMsg("正在切换并重启相关进程…");
     try {
