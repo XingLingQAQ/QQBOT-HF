@@ -1,7 +1,9 @@
 """Plugin management: install / uninstall / configure / toggle / restart."""
 
 import os
+import shutil
 import subprocess
+import tempfile
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,21 +35,47 @@ def _module_name(pkg_name: str) -> str:
     return pkg_name.replace("-", "_")
 
 
-def _pip(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        [
-            config.PYTHON_BIN,
-            "-m",
-            "pip",
-            *args,
-            "--target",
-            config.PYTHON_PACKAGES_DIR,
-            "--upgrade",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
+def _pip_install(name: str) -> subprocess.CompletedProcess:
+    """Install/upgrade a plugin into the persistent overlay, crash-free.
+
+    pip's ``--target`` + ``--upgrade`` path ``shutil.rmtree()``s the existing
+    package dir before replacing it, which on HF's /data (overlay/fuse) raises
+    ``OSError: [Errno 39] Directory not empty`` and aborts the install half-way.
+    Instead we install into a fresh empty tempdir (no rmtree possible) and then
+    merge the result into the overlay with ``copytree(dirs_exist_ok=True)``,
+    overwriting files in place. This gives a clean (re)install/upgrade including
+    every transitive dependency, without ever taking pip's destructive path.
+
+    We pass ``--target <tmp>`` explicitly (command-line beats the pip.conf
+    ``[install] target=/data`` so the staging dir wins) and strip any inherited
+    ``PIP_CONFIG_FILE`` to avoid surprises.
+    """
+    env = os.environ.copy()
+    env.pop("PIP_CONFIG_FILE", None)
+    tmp = tempfile.mkdtemp(prefix="qqbot-plugin-")
+    try:
+        proc = subprocess.run(
+            [
+                config.PYTHON_BIN,
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--target",
+                tmp,
+                name,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        if proc.returncode == 0:
+            os.makedirs(config.PYTHON_PACKAGES_DIR, exist_ok=True)
+            shutil.copytree(tmp, config.PYTHON_PACKAGES_DIR, dirs_exist_ok=True)
+        return proc
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _detect_version(pkg_name: str) -> str:
@@ -85,7 +113,7 @@ def install_plugin(body: NameBody):
     if not utils.valid_plugin_name(name):
         raise HTTPException(status_code=400, detail="invalid plugin name")
     try:
-        proc = _pip("install", name)
+        proc = _pip_install(name)
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="pip not available")
     except subprocess.TimeoutExpired:

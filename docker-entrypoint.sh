@@ -35,25 +35,32 @@ export DATA_DIR PYTHON_BIN PYTHON_PACKAGES_DIR PORT ADMIN_USER ADMIN_PASS STATIC
 # survive a rebuild/redeploy, and on Hugging Face only /data persists. We point
 # pip at the overlay dir (the same one the .pth adds to sys.path) via a config
 # file written at RUNTIME (so the Docker *build*'s own pip installs into the
-# image are untouched). `target` makes every `pip install` land in /data;
-# `upgrade=true` avoids pip's "target directory already exists" error when a
-# package is reinstalled, so a plain `pip install <pkg>` from the web terminal
-# just works and persists. The .pth still keeps system core packages winning, so
-# this cannot reintroduce the nonebot/pydantic shadowing crashes.
+# image are untouched). `target` makes every `pip install` land in /data.
+#
+# We deliberately do NOT set `upgrade = true`: combined with `--target`, pip's
+# upgrade path `shutil.rmtree()`s the pre-existing package dir before replacing
+# it, and on HF's /data (overlay/fuse) `os.rmdir` of a freshly-emptied dir
+# raises `OSError: [Errno 39] Directory not empty`, aborting the install AFTER
+# packages are downloaded — leaving transitive deps (e.g. nonebot_plugin_alconna)
+# half-installed and crashing dependent plugins. Without `upgrade`, pip skips
+# already-present packages (warning only) but still fills in MISSING deps, and
+# never takes the destructive rmtree path. Clean upgrades go through the
+# install-to-tempdir-then-merge path used by the entrypoint loop and the panel.
+# The .pth still keeps system core packages winning, so this cannot reintroduce
+# the nonebot/pydantic shadowing crashes.
 PIP_CONFIG_FILE="$DATA_DIR/manager/pip.conf"
 mkdir -p "$DATA_DIR/manager"
 _write_pip_conf() {
-  # $1 = destination path. Keep `target`/`upgrade` under [install] (NOT
-  # [global]/PIP_TARGET) so they apply only to `pip install` — putting them
-  # globally would make `pip uninstall`, `pip show` and `pip list` choke on an
-  # unsupported --target option.
+  # $1 = destination path. Keep `target` under [install] (NOT [global]/PIP_TARGET)
+  # so it applies only to `pip install` — putting it globally would make
+  # `pip uninstall`, `pip show` and `pip list` choke on an unsupported --target
+  # option.
   cat > "$1" <<PIPCONF
 [global]
 no-cache-dir = true
 
 [install]
 target = $PYTHON_PACKAGES_DIR
-upgrade = true
 PIPCONF
 }
 _write_pip_conf "$PIP_CONFIG_FILE"
@@ -217,7 +224,11 @@ PY
   for name in "${PLUGIN_NAMES[@]:-}"; do
     [ -z "$name" ] && continue
     echo "[entrypoint] ensuring plugin installed: $name"
-    "$PYTHON_BIN" -m pip install --no-cache-dir --upgrade --target "$PYTHON_PACKAGES_DIR" "$name" || echo "[entrypoint] WARN: failed to install $name"
+    # No --upgrade: that would trigger pip's destructive rmtree on /data (Errno
+    # 39). Without it pip skips packages already present and only installs the
+    # missing ones (including transitive deps), which is exactly the
+    # "ensure installed" semantics we want here and is crash-free.
+    "$PYTHON_BIN" -m pip install --no-cache-dir --target "$PYTHON_PACKAGES_DIR" "$name" || echo "[entrypoint] WARN: failed to install $name"
   done
 fi
 
