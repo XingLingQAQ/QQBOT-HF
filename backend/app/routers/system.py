@@ -157,6 +157,12 @@ def _run_pip_upgrade() -> str:
         "nonebot2>=2.5.0",
         "nonebot-adapter-onebot>=2.4.6",
     ]
+    # No --upgrade: with --target it would `shutil.rmtree()` existing dirs and
+    # crash with `OSError: [Errno 39] Directory not empty` on HF's /data
+    # (overlay/fuse). It would also shove a duplicate nonebot/pydantic core into
+    # the overlay (the shadowing the .pth fight). Without it, pip treats the
+    # image's system packages as already satisfying these constraints and only
+    # installs genuinely missing ones into /data — crash-free and pollution-free.
     try:
         proc = subprocess.run(
             [
@@ -164,7 +170,6 @@ def _run_pip_upgrade() -> str:
                 "-m",
                 "pip",
                 "install",
-                "--upgrade",
                 "--target",
                 config.PYTHON_PACKAGES_DIR,
                 *packages,
