@@ -42,6 +42,29 @@ mkdir -p "$DATA_DIR/lagrange" \
          "$DATA_DIR/napcat/logs" \
          "$DATA_DIR/napcat/home"
 
+# Minecraft-server-style per-program log dirs. supervisord needs the parent of
+# every stdout_logfile to exist before it starts, and we rotate each program's
+# latest.log here so the first run after a container boot gets a fresh file (the
+# previous run is gzip-archived). The backend mirrors this rotation on every
+# start/restart (see logstore.rotate); keep the two layouts in sync.
+LOG_BASE="$DATA_DIR/manager/logs"
+rotate_boot_log() {
+  d="$LOG_BASE/$1"
+  mkdir -p "$d"
+  f="$d/latest.log"
+  if [ -s "$f" ]; then
+    ts=$(date +%Y-%m-%d_%H%M%S)
+    dest="$d/$ts.log.gz"; n=1
+    while [ -e "$dest" ]; do dest="$d/${ts}_$n.log.gz"; n=$((n + 1)); done
+    gzip -c "$f" > "$dest" && rm -f "$f"
+    # Keep only the newest 20 archives per program.
+    ls -1t "$d"/*.log.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
+  fi
+}
+for _prog in backend lagrange signserver napcat nonebot supervisord; do
+  rotate_boot_log "$_prog"
+done
+
 # 2. Runtime dependencies are installed in the image. Plugins are persisted as
 # importable packages under /data/python-packages so no script in /data needs to
 # be executed (compatible with noexec persistent volumes).
