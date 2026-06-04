@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
 import api from "../api";
 import { procState, protocolLabel } from "../format";
+import { useConfirm, useToast } from "../ui.jsx";
 
 const ACTIONS = [
   { key: "start", label: "启动", cls: "btn" },
@@ -13,7 +14,8 @@ export default function Processes() {
   const [procs, setProcs] = useState([]);
   const [protocol, setProtocol] = useState("");
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -33,19 +35,24 @@ export default function Processes() {
 
   const act = async (program, action, label) => {
     const verb = { start: "启动", stop: "停止", restart: "重启" }[action];
-    if (!window.confirm(`确认${verb}「${label}」进程？`)) return;
+    const ok = await confirm({
+      title: `${verb}进程`,
+      message: `确认${verb}「${label}」进程？`,
+      confirmText: verb,
+      danger: action === "stop",
+    });
+    if (!ok) return;
     setBusy(`${program}:${action}`);
-    setMsg("");
     try {
       const { data } = await api.post("/processes/action", { program, action });
-      setMsg(
-        data.ok
-          ? `「${label}」${verb}成功，当前状态：${procState(data.status).text}`
-          : `「${label}」${verb}失败：${data.log || "未知错误"}`
-      );
+      if (data.ok) {
+        toast.success(`「${label}」${verb}成功，当前状态：${procState(data.status).text}`);
+      } else {
+        toast.error(`「${label}」${verb}失败：${data.log || "未知错误"}`);
+      }
       await load();
     } catch (e) {
-      setMsg(`「${label}」${verb}失败：${e?.response?.data?.detail || e.message}`);
+      toast.error(`「${label}」${verb}失败：${e?.response?.data?.detail || e.message}`);
     } finally {
       setBusy("");
     }
@@ -90,7 +97,6 @@ export default function Processes() {
           })}
           {procs.length === 0 && <p className="hint-line muted">暂无可控制的进程。</p>}
         </div>
-        {msg && <p className="hint-line info">{msg}</p>}
       </Card>
     </div>
   );

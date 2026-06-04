@@ -4,6 +4,7 @@ import ProtocolSelector from "../components/ProtocolSelector.jsx";
 import NapcatQuickLogin from "../components/NapcatQuickLogin.jsx";
 import api from "../api";
 import { loginState, procState, qqAvatar } from "../format";
+import { useConfirm, useToast } from "../ui.jsx";
 
 // Process rows shown for each protocol backend (nonebot + backend are common).
 function procRows(protocol) {
@@ -26,7 +27,8 @@ export default function Overview() {
   const [login, setLogin] = useState({ status: "offline", qq: "", nickname: "" });
   const [systemConfig, setSystemConfig] = useState(null);
   const [updateBusy, setUpdateBusy] = useState("");
-  const [updateMsg, setUpdateMsg] = useState("");
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const tick = useCallback(async () => {
     try {
@@ -73,15 +75,20 @@ export default function Overview() {
       },
     };
     const item = map[kind];
-    if (!item || !window.confirm(item.confirm)) return;
+    if (!item) return;
+    const ok = await confirm({
+      title: item.label,
+      message: item.confirm,
+      confirmText: "继续",
+    });
+    if (!ok) return;
     setUpdateBusy(kind);
-    setUpdateMsg("");
     try {
       await api.post(item.url, {});
-      setUpdateMsg(`${item.label}已完成。`);
+      toast.success(`${item.label}已完成。`);
       await tick();
     } catch (e) {
-      setUpdateMsg(e?.response?.data?.detail || `${item.label}失败`);
+      toast.error(e?.response?.data?.detail || `${item.label}失败`);
     } finally {
       setUpdateBusy("");
     }
@@ -148,7 +155,6 @@ export default function Overview() {
           <p className="hint-line">
             更新操作只影响容器内运行环境：Lagrange 二进制位于 /opt/lagrange，动态插件位于 /data/python-packages。
           </p>
-          {updateMsg && <p className="hint-line info">{updateMsg}</p>}
         </Card>
 
         <Card title="登录信息">

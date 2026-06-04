@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../api";
 import Card from "./Card.jsx";
+import { useToast } from "../ui.jsx";
 
 // NapCat quick-login config. When enabled with a QQ uin, NapCat reuses a
 // previously scanned session and auto-logs in (no QR). Only affects the NapCat
@@ -10,7 +11,7 @@ export default function NapcatQuickLogin() {
   const [qq, setQq] = useState("");
   const [protocol, setProtocol] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
+  const toast = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -29,11 +30,10 @@ export default function NapcatQuickLogin() {
 
   const save = async () => {
     if (enabled && !/^\d+$/.test(qq.trim())) {
-      setMsg("启用快速登录时必须填写纯数字的 QQ 号。");
+      toast.error("启用快速登录时必须填写纯数字的 QQ 号。");
       return;
     }
     setBusy(true);
-    setMsg("");
     try {
       const { data } = await api.post("/napcat/quick-login", {
         enabled,
@@ -42,14 +42,14 @@ export default function NapcatQuickLogin() {
       setEnabled(!!data.enabled);
       setQq(data.qq || "");
       if (data.applied) {
-        setMsg("已保存并重启 NapCat 使配置生效。");
+        toast.success("已保存并重启 NapCat 使配置生效。");
       } else if (protocol === "napcat") {
-        setMsg("已保存（NapCat 重启未成功，请在「进程控制」中手动重启）。");
+        toast.info("已保存（NapCat 重启未成功，请在「进程控制」中手动重启）。");
       } else {
-        setMsg("已保存。切换到 NapCat 协议后生效。");
+        toast.success("已保存。切换到 NapCat 协议后生效。");
       }
     } catch (e) {
-      setMsg(`保存失败：${e?.response?.data?.detail || e.message}`);
+      toast.error(`保存失败：${e?.response?.data?.detail || e.message}`);
     } finally {
       setBusy(false);
     }
@@ -89,7 +89,6 @@ export default function NapcatQuickLogin() {
       {protocol && protocol !== "napcat" && (
         <p className="hint-line muted">当前协议为「{protocol}」，配置将在切换到 NapCat 后生效。</p>
       )}
-      {msg && <p className="hint-line info">{msg}</p>}
     </Card>
   );
 }

@@ -2,15 +2,17 @@ import { useEffect, useState, useCallback } from "react";
 import Card from "../components/Card.jsx";
 import Modal from "../components/Modal.jsx";
 import api from "../api";
+import { useConfirm, useToast } from "../ui.jsx";
 
 export default function Plugins() {
   const [plugins, setPlugins] = useState([]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState("");
   const [configFor, setConfigFor] = useState(null);
   const [configText, setConfigText] = useState("{}");
   const [systemConfig, setSystemConfig] = useState(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -28,11 +30,6 @@ export default function Plugins() {
       .catch(() => {});
   }, [load]);
 
-  const flash = (text) => {
-    setToast(text);
-    setTimeout(() => setToast(""), 4000);
-  };
-
   const install = async (e) => {
     e.preventDefault();
     const pkg = name.trim();
@@ -40,25 +37,31 @@ export default function Plugins() {
     setBusy(true);
     try {
       await api.post("/plugins/install", { name: pkg });
-      flash(`已安装 ${pkg}`);
+      toast.success(`已安装 ${pkg}`);
       setName("");
       await load();
     } catch (err) {
-      flash(err?.response?.data?.detail || "安装失败");
+      toast.error(err?.response?.data?.detail || "安装失败");
     } finally {
       setBusy(false);
     }
   };
 
   const uninstall = async (pkg) => {
-    if (!window.confirm(`确定卸载 ${pkg} 吗？`)) return;
+    const ok = await confirm({
+      title: "卸载插件",
+      message: `确定卸载 ${pkg} 吗？此操作不可撤销。`,
+      confirmText: "卸载",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api.post("/plugins/uninstall", { name: pkg });
-      flash(`已卸载 ${pkg}`);
+      toast.success(`已卸载 ${pkg}`);
       await load();
     } catch (err) {
-      flash(err?.response?.data?.detail || "卸载失败");
+      toast.error(err?.response?.data?.detail || "卸载失败");
     } finally {
       setBusy(false);
     }
@@ -68,9 +71,10 @@ export default function Plugins() {
     setBusy(true);
     try {
       await api.put("/plugins/toggle", { name: p.name, enabled: !p.enabled });
+      toast.success(`已${p.enabled ? "禁用" : "启用"} ${p.name}`);
       await load();
     } catch (err) {
-      flash(err?.response?.data?.detail || "操作失败");
+      toast.error(err?.response?.data?.detail || "操作失败");
     } finally {
       setBusy(false);
     }
@@ -86,17 +90,17 @@ export default function Plugins() {
     try {
       parsed = JSON.parse(configText || "{}");
     } catch {
-      flash("配置必须是合法的 JSON");
+      toast.error("配置必须是合法的 JSON");
       return;
     }
     setBusy(true);
     try {
       await api.put("/plugins/config", { name: configFor.name, config: parsed });
-      flash("配置已保存");
+      toast.success("配置已保存");
       setConfigFor(null);
       await load();
     } catch (err) {
-      flash(err?.response?.data?.detail || "保存失败");
+      toast.error(err?.response?.data?.detail || "保存失败");
     } finally {
       setBusy(false);
     }
@@ -106,9 +110,9 @@ export default function Plugins() {
     setBusy(true);
     try {
       await api.post("/plugins/restart");
-      flash("已重启 NoneBot");
+      toast.success("已重启 NoneBot");
     } catch (err) {
-      flash(err?.response?.data?.detail || "重启失败");
+      toast.error(err?.response?.data?.detail || "重启失败");
     } finally {
       setBusy(false);
     }
@@ -213,8 +217,6 @@ export default function Plugins() {
           onChange={(e) => setConfigText(e.target.value)}
         />
       </Modal>
-
-      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
