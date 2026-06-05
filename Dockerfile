@@ -28,7 +28,7 @@ RUN gcc -std=c99 -shared -fPIC -o libsymbols.so symbols.c && \
     cp libsymbols.so /out/libsymbols.so
 
 # ---------- Stage 3: runtime ----------
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PORT=7860 \

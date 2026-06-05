@@ -23,6 +23,25 @@ fi
 # `.pth` file that appends this dir to sys.path (see Dockerfile), but `site`
 # only honors it if the dir exists at interpreter startup.
 mkdir -p "$PYTHON_PACKAGES_DIR"
+
+# Guard the persisted overlay against a Python ABI change. /data/python-packages
+# may hold compiled wheels (pydantic_core, tarina, multidict, yarl, propcache,
+# ...) built for the interpreter that first populated it (e.g. cp310). When the
+# image's Python is upgraded (3.10 -> 3.11+), those .so files no longer match the
+# running interpreter's ABI, so dependent plugins fail to import
+# (ModuleNotFoundError on the compiled extension). Stamp the overlay with the
+# interpreter's major.minor and, on a mismatch, wipe its contents so the plugin
+# install loop below rebuilds ABI-correct wheels. (rm via the shell — NOT pip's
+# rmtree — so this never hits the /data Errno 39 path.)
+_py_abi="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+_abi_stamp="$PYTHON_PACKAGES_DIR/.python-abi"
+_prev_abi="$(cat "$_abi_stamp" 2>/dev/null || true)"
+if [ -n "$_prev_abi" ] && [ "$_prev_abi" != "$_py_abi" ]; then
+  echo "[entrypoint] Python ABI changed ($_prev_abi -> $_py_abi); rebuilding $PYTHON_PACKAGES_DIR for the new interpreter"
+  find "$PYTHON_PACKAGES_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+fi
+printf '%s\n' "$_py_abi" > "$_abi_stamp" 2>/dev/null || true
+
 export DATA_DIR PYTHON_BIN PYTHON_PACKAGES_DIR PORT ADMIN_USER ADMIN_PASS STATIC_DIR
 # NOTE: we deliberately do NOT prepend $PYTHON_PACKAGES_DIR to PYTHONPATH.
 # PYTHONPATH would outrank the system site-packages and let a plugin's
