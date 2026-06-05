@@ -132,6 +132,15 @@ else
 fi
 
 [ -f "$DATA_DIR/nonebot/.env" ]              || cp "$TEMPLATES/env.template"             "$DATA_DIR/nonebot/.env"
+# Self-heal deployments whose .env predates the ALEMBIC_STARTUP_CHECK default
+# (the .env above is only seeded on first run). Plugins pulling in
+# nonebot-plugin-orm otherwise block NoneBot's startup with an interactive
+# "目标数据库未更新到最新迁移? [y/N]" prompt that has no stdin under supervisord.
+# Append only when the key is entirely absent so an explicit user choice is kept.
+if [ -f "$DATA_DIR/nonebot/.env" ] && ! grep -qiE '^[[:space:]]*ALEMBIC_STARTUP_CHECK[[:space:]]*=' "$DATA_DIR/nonebot/.env"; then
+  printf '\nALEMBIC_STARTUP_CHECK=false\n' >> "$DATA_DIR/nonebot/.env"
+  echo "[entrypoint] added ALEMBIC_STARTUP_CHECK=false to nonebot/.env (unattended ORM migrations)"
+fi
 [ -f "$DATA_DIR/lagrange/appsettings.json" ] || cp "$TEMPLATES/appsettings.json.template" "$DATA_DIR/lagrange/appsettings.json"
 [ -f "$DATA_DIR/napcat/config/onebot11.json" ] || cp "$TEMPLATES/onebot11.json.template" "$DATA_DIR/napcat/config/onebot11.json"
 [ -f "$DATA_DIR/plugins.json" ]              || echo '{"plugins":[]}' > "$DATA_DIR/plugins.json"
