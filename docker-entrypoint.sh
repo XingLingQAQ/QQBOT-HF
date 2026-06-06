@@ -102,6 +102,17 @@ mkdir -p "$DATA_DIR/lagrange" \
          "$DATA_DIR/napcat/logs" \
          "$DATA_DIR/napcat/home"
 
+# Lagrange.OneBot keeps group/private message history in a Realm database. Realm
+# needs a named pipe (its "ExternalCommitHelper") inside the DB directory, but
+# HF's fuse-backed /data does NOT support FIFOs -> every received message throws
+# "Failed to create ExternalCommitHelper: No such file or directory". Keep the
+# realm DB on the container's local (FIFO-capable) filesystem via Lagrange's
+# ConfigPath:Database. Message history is therefore not persisted across full
+# redeploys, which is unavoidable: /data is the only persistent store and it
+# cannot host a Realm DB. Login state (keystore.json) still lives in /data.
+LAGRANGE_REALM_DIR="${LAGRANGE_REALM_DIR:-${HOME:-/home/appuser}/.lagrange/realm-db}"
+mkdir -p "$LAGRANGE_REALM_DIR" 2>/dev/null || true
+
 # 2. Runtime dependencies are installed in the image. Plugins are persisted as
 # importable packages under /data/python-packages so no script in /data needs to
 # be executed (compatible with noexec persistent volumes).
@@ -170,10 +181,11 @@ fi
 # unless they are empty or known legacy defaults. The default points at the
 # self-hosted SignServer (127.0.0.1:8087); legacy official URLs are migrated to
 # it since the central sign server is offline.
-"$PYTHON_BIN" - "$DATA_DIR/lagrange/appsettings.json" "${LAGRANGE_SIGN_SERVER_URL:-http://127.0.0.1:${SIGNSERVER_PORT:-8087}}" <<'PY'
+"$PYTHON_BIN" - "$DATA_DIR/lagrange/appsettings.json" "${LAGRANGE_SIGN_SERVER_URL:-http://127.0.0.1:${SIGNSERVER_PORT:-8087}}" "$LAGRANGE_REALM_DIR" "$DATA_DIR" <<'PY'
 import json, os, sys
 
 path, default_sign = sys.argv[1], sys.argv[2]
+realm_dir, data_dir = sys.argv[3], sys.argv[4]
 old_sign_urls = {
     "",
     "https://sign.lagrangecore.org/api/sign",
@@ -213,6 +225,18 @@ if reverse is None:
     impls.append(desired)
 else:
     reverse.update(desired)
+# Point Lagrange's Realm message DB at a FIFO-capable local path. Realm cannot
+# create its ExternalCommitHelper named pipe on the fuse-backed /data, so the
+# default (CWD-relative ./lagrange-<uin>-db under /data/lagrange) crashes on
+# every received message. Only (re)write the key when unset or still pointing
+# into the persistent data dir, so an explicit local override is preserved.
+config_path = cfg.get("ConfigPath")
+if not isinstance(config_path, dict):
+    config_path = {}
+    cfg["ConfigPath"] = config_path
+_db = config_path.get("Database")
+if not _db or _db == "." or os.path.abspath(_db).startswith(os.path.abspath(data_dir)):
+    config_path["Database"] = realm_dir
 tmp = path + ".tmp"
 with open(tmp, "w", encoding="utf-8") as fh:
     json.dump(cfg, fh, ensure_ascii=False, indent=2)
