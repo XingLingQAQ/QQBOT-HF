@@ -9,6 +9,9 @@
   "SignServerUrl": "http://127.0.0.1:8087",
   "SignProxyUrl": "",
   "MusicSignServerUrl": "",
+  "ConfigPath": {
+    "Database": "/home/appuser/.lagrange/realm-db"
+  },
   "Account": {
     "Uin": 0,
     "Protocol": "Linux",
